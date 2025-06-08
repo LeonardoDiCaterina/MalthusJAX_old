@@ -1,0 +1,102 @@
+# File: MalthusJAX/pyproject.toml
+[build-system]
+requires = ["hatchling>=1.8.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "malthusjax"
+version = "0.1.0"
+description = "JAX-based genetic programming framework with tensorized parallelization"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Leonardo DiCaterina", email = "your.email@example.com"}
+]
+maintainers = [
+    {name = "Leonardo DiCaterina", email = "your.email@example.com"}
+]
+keywords = ["genetic-programming", "evolutionary-computation", "jax", "neat", "machine-learning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10", 
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "jax>=0.4.0",
+    "jaxlib>=0.4.0", 
+    "numpy>=1.21.0",
+    "typing-extensions>=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0", 
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+    "isort>=5.12.0",
+]
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-autodoc-typehints>=1.19.0",
+    "sphinx-rtd-theme>=1.2.0",
+    "myst-parser>=0.18.0",
+]
+examples = [
+    "matplotlib>=3.6.0",
+    "seaborn>=0.12.0",
+    "jupyter>=1.0.0",
+]
+all = ["malthusjax[dev,docs,examples]"]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/MalthusJAX"
+Documentation = "https://malthusjax.readthedocs.io"
+Repository = "https://github.com/yourusername/MalthusJAX"
+Issues = "https://github.com/yourusername/MalthusJAX/issues"
+
+# Tool configurations
+[tool.black]
+line-length = 100
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = [
+    "--strict-markers",
+    "--verbose",
+    "--cov=src/malthusjax",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests",
+]
+
+[tool.coverage.run]
+source = ["src/malthusjax"]
+omit = ["*/tests/*", "*/__pycache__/*"]
