@@ -1,24 +1,12 @@
-# File: MalthusJAX/src/malthusjax/__init__.py
-"""MalthusJAX: JAX-based genetic programming framework.
+"""
+MalthusJAX: A JAX-based framework for evolutionary computation.
 
-A high-performance evolutionary computation framework designed for:
-- JAX-based tensorized parallelization
-- Modular 6-level architecture
-- Capability-based extensibility
-- NEAT algorithm implementation
+A comprehensive 6-level genetic programming framework built on JAX, designed for 
+tensorized parallelization, research-grade experimentation, and open-source extensibility.
 """
 
+from . import core
+from . import operators
+
 __version__ = "0.1.0"
-__author__ = "Leonardo Di Caterina"
-
-# Core exports will be added as you implement them
-# from .core import (
-#     AbstractGenome,
-#     AbstractFitness, 
-#     AbstractSolution,
-# )
-
-__all__ = [
-    "__version__",
-    "__author__",
-]
+__all__ = ["core", "operators","models"]
