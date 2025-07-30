@@ -61,7 +61,7 @@ class BinarySolution(AbstractSolution):
     @property
     def p(self) -> float:
         """Get the probability parameter."""
-        return self.genome_init_params.get('p', self._p)
+        return self.genome_init_params.get('p')
     @p.setter
     def p(self, value: float):
         """Set the probability parameter."""
@@ -222,11 +222,11 @@ class BinarySolution(AbstractSolution):
         """
         Reconstruct from flattened representation.
         """
+        print(f"Reconstructing BinarySolution with aux_data: {aux_data}")
         genome_tensor, fitness_array = children
-        
         # Create solution
         solution = cls(
-            array_size=aux_data['array_size'],
+            array_size=aux_data.get('array_size'),
             p=aux_data['p'],
             random_init=False,
             fitness_transform=aux_data.get('fitness_transform')
@@ -235,7 +235,7 @@ class BinarySolution(AbstractSolution):
         # Set genome from tensor (context handled automatically)
         solution.genome = BinaryGenome.from_tensor(
             genome_tensor, 
-            context=solution.get_serialization_context()
+            genome_init_params={'array_size': aux_data['array_size'], 'p': aux_data['p']}
         )
         
         # Set fitness if it was saved
@@ -286,9 +286,10 @@ class BinarySolution(AbstractSolution):
             raise TypeError("other must be a BinarySolution")
         if other.array_size != self.array_size:
             raise ValueError("Solutions must have same array size")
-        
-        return int(jnp.sum(jnp.abs(self.binary_array - other.binary_array)))
-    
+        x1 = self.to_tensor()
+        x2 = other.to_tensor()
+        return int(jnp.sum(jnp.abs(x1 - x2)))
+
     def to_binary_string(self) -> str:
         """Convert binary array to string representation."""
         return ''.join(str(int(x)) for x in self.binary_array.tolist())

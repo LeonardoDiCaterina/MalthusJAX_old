@@ -22,7 +22,6 @@ class AbstractPopulation(ABC, Generic[T]):
         self.genome_init_params = genome_init_params
         self.fitness_transform = fitness_transform
         self.random_key = random_key #if random_key is not None else jar.PRNGKey(0)
-        print(f"genome_init_params{genome_init_params}")
         if random_init:
             self._random_init( genome_init_params, random_key=self.random_key, fitness_transform = fitness_transform)
     
@@ -142,7 +141,11 @@ class AbstractPopulation(ABC, Generic[T]):
         """
         if fitness_values is not None and fitness_values.shape[0] != stack.shape[0]:
             raise ValueError("fitness_values must match the number of solutions in stack")
-                
+
+        if context is None:
+            genome_init_params = self.genome_init_params
+        else:
+            genome_init_params = context.genome_init_params
         class_type = type(self)
         
         size_of_stack = stack.shape[0]
@@ -154,11 +157,11 @@ class AbstractPopulation(ABC, Generic[T]):
             random_init = False,
             random_key = random_keys[-1]
         )
-        solutions0 = self.solution_class(genome_init_params = self.genome_init_params, random_init=False)
+        solutions0 = self.solution_class(genome_init_params = genome_init_params, random_init=False)
         for i in range(size_of_stack):
             tensor = stack[i]
             random_key = random_keys[i]
-            solution = solutions0.from_tensor(tensor = tensor,genome_init_params = context.genome_init_params)
+            solution = solutions0.from_tensor(tensor = tensor,genome_init_params = genome_init_params)
             if fitness_values is not None:
                 solution.raw_fitness = fitness_values[i]
             new_population.add_solution(solution)

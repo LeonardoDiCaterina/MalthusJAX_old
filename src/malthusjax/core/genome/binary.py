@@ -78,20 +78,21 @@ class BinaryGenome(AbstractGenome):
     def _validate(self) -> bool:
         """Validate that genome contains only 0s and 1s."""
         if not hasattr(self, 'genome'):
-            #print(f"hasattr(self, 'genome'){hasattr(self, 'genome')}")
+            print(f"hasattr(self, 'genome'){hasattr(self, 'genome')}")
             return False
             
         # Check shape
         if self.genome.shape != (self.array_size,):
-            print(f"{self.genome.shape} = {self.array_size,}")
+            print(f"{self.genome} = {self.array_size,}")
             return False
             
         # Check that all elements are 0 or 1
         if not jnp.issubdtype(self.genome.dtype, jnp.integer) and not jnp.issubdtype(self.genome.dtype, jnp.bool_):
-            #print("probem counting zeroes")
+            print("problem counting zeroes")
             return False
-            
-        return jnp.all(jnp.isin(self.genome, jnp.array([0, 1], dtype=self.genome.dtype)))
+        
+        self._is_valid = jnp.all(jnp.logical_or(self.genome == 0, self.genome == 1)).item()
+        return self._is_valid
 
     def to_tensor(self) -> Array:
         """Convert the genome to a JAX tensor."""
@@ -106,7 +107,6 @@ class BinaryGenome(AbstractGenome):
         # Extract parameters from context if available
         
         # Create instance without random initialization
-        print(genome_init_params)
         new_genome = cls(
             **genome_init_params,  # Unpack the genome initialization parameters 
             random_init=False,

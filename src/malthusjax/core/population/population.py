@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Generic, TypeVar, Optional
 import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
 
+from malthusjax.core.base import SerializationContext
 from malthusjax.core.solution.base import AbstractSolution
 from malthusjax.core.population.base import AbstractPopulation
 
@@ -11,8 +12,8 @@ T = TypeVar('T', bound=AbstractSolution)
 
 class Population(AbstractPopulation[T], Generic[T]):
     """Standard population implementation for genetic algorithms."""
-    
-    def __init__(self, solution_class: type[T], max_size: int, random_key: Optional[jar.PRNGKey] = None, random_init: bool = True, genome_init_params: Dict = {}, fitness_transform = None) -> None:
+
+    def __init__(self, solution_class: type[T], max_size: int, random_key: Optional[jar.PRNGKey] = None, context: Optional[SerializationContext] = None, random_init: bool = True, genome_init_params: Dict = {}, fitness_transform = None) -> None:
         """Initialize the population with a solution class and maximum size.
         
         Args:
@@ -23,8 +24,8 @@ class Population(AbstractPopulation[T], Generic[T]):
         """
         self._solutions: List[T] = []
         self.genome_init_params = genome_init_params
-        self._random_key = random_key,
-        super().__init__(solution_class = solution_class, max_size = max_size, random_key = random_key, random_init = random_init, genome_init_params = genome_init_params, fitness_transform = fitness_transform)
+        self._random_key = random_key
+        super().__init__(solution_class = solution_class, max_size = max_size, random_key = random_key, context = context, random_init = random_init, genome_init_params = genome_init_params, fitness_transform = fitness_transform)
         self._best_solution: Optional[T] = None
 
             
