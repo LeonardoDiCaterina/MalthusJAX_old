@@ -205,6 +205,20 @@ class AbstractPopulation(ABC, Generic[T]):
                 new_population[i].raw_fitness = fitness_values[i]
         
         return new_population
+    
+    def from_list_of_indexes(self,
+                             indexes: List[int]) -> "AbstractPopulation":
+        """Create a new population from a list of solution indexes.
+        Args:
+            indexes: List of indexes to select solutions from the current population.
+        Returns:
+            A new Population instance with solutions selected by the provided indexes.
+        """
+        population_indexes = [self._solutions[i] for i in indexes if i < len(self._solutions)]
+        if not population_indexes:
+            raise ValueError("No valid solutions found for the provided indexes.")
+
+        return self.from_solution_list(population_indexes)
 
     def to_stack(self) -> jnp.ndarray:
         """Stack all genomes in the population into a single JAX array.

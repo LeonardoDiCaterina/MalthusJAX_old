@@ -31,6 +31,7 @@ class KnapsackFitnessEvaluator(AbstractFitnessEvaluator):
         self.values = values
         self.weight_limit = weight_limit
         self.default_exceding_weight_penalization = default_exceding_weight_penalization
+        super().__init__()
     
     def tensor_fitness_function(self, genome_tensor: Array) -> float:
         """

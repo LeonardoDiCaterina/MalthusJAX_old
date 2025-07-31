@@ -64,3 +64,9 @@ docs/build/
 # MLflow
 mlruns/
 mlartifacts/
+examples/test_notebool.ipynb
+examples/test_level1.ipynb
+.gitignore
+README.html
+docs/context.md
+examples/test_level2.ipynb
