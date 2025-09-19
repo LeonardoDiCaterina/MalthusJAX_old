@@ -11,6 +11,5 @@ This module contains the foundational Level 1 components:
 from . import base
 from . import genome  
 from . import fitness
-from . import solution
 
-__all__ = ["base", "genome", "fitness", "solution", "population"] 
+__all__ = ["base", "genome", "fitness", "population"] 

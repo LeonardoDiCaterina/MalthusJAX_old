@@ -14,9 +14,7 @@ import jax.numpy as jnp # type: ignore
 import jax.random as jr # type: ignore
 
 from malthusjax.core.population.base import AbstractPopulation
-from malthusjax.core.solution.base import AbstractSolution
 
-T = TypeVar('T', bound=AbstractSolution)
 P = TypeVar('P', bound=AbstractPopulation)
 
 class AbstractGeneticOperator(ABC, Generic[P]):
@@ -28,10 +26,8 @@ class AbstractGeneticOperator(ABC, Generic[P]):
     
     def __init__(self) -> None:
         """Initialize the genetic operator."""
-        self.built = False
-        self._compiled_fn: Optional[Callable] = None
-    
-    @abstractmethod
+        self.built = True
+
     def build(self, population: P) -> Callable:
         """Build the operator and return the compiled function.
         
@@ -57,12 +53,10 @@ class AbstractGeneticOperator(ABC, Generic[P]):
         Raises:
             ValueError: If operator hasn't been built yet.
         """
-        if not self.built or self._compiled_fn is None:
-            raise ValueError("Operator not built. Call build() first.")
         return self._compiled_fn
     
     @abstractmethod 
-    def call(self, population: P, random_key: jax.Array, **kwargs) -> P:
+    def call(self, population: P, random_key: jax.Array, fitness_values: Optional[jax.Array] = None, **kwargs) -> P:
         """Apply the genetic operation to the population using the compiled function.
         
         This method handles the population-level orchestration while delegating
@@ -77,8 +71,8 @@ class AbstractGeneticOperator(ABC, Generic[P]):
             New population after applying the genetic operation.
         """
         pass
-    
-    def __call__(self, population: P, random_key: Optional[jax.Array] = None, **kwargs) -> P:
+
+    def __call__(self, population: P, random_key: Optional[jax.Array] = None, fitness_values: Optional[jax.Array] = None, **kwargs) -> P:
         """Apply the operator to a population.
         
         Args:
@@ -95,4 +89,9 @@ class AbstractGeneticOperator(ABC, Generic[P]):
         if random_key is None:
             random_key = jr.PRNGKey(0)
             
-        return self.call(population, random_key, **kwargs)
+        return self.call(
+            population=population,
+            random_key=random_key,
+            fitness_values=fitness_values,
+            **kwargs
+        )

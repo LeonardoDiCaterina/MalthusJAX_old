@@ -10,8 +10,9 @@ import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
 from functools import partial # type: ignore
 
-from malthusjax.core.population.base import AbstractPopulation
+from malthusjax.core.population.base import AbstractPopulation 
 from malthusjax.operators.base import AbstractGeneticOperator
+
 
 P = TypeVar('P', bound=AbstractPopulation)
 
@@ -32,7 +33,8 @@ class AbstractMutation(AbstractGeneticOperator[P], Generic[P]):
         if not (0 <= mutation_rate <= 1):
             raise ValueError("Mutation rate must be between 0 and 1")
         self.mutation_rate = mutation_rate
-        
+        self._compiled_fn: Optional[Callable] = self._create_mutation_function()
+
     def build(self, population: P) -> Callable:
         """Build the mutation operator and return JIT-compiled function.
         
@@ -50,18 +52,17 @@ class AbstractMutation(AbstractGeneticOperator[P], Generic[P]):
             ```
             
         Raises:
-            ValueError: If population is empty or does not have a validate method.
             TypeError: If population is not an instance of AbstractPopulation.
             RuntimeError: If the mutation function cannot be built due to invalid population.    
             
         """
-        if population.size == 0:
+        if len(population) == 0:
             raise ValueError("Cannot build mutation operator for empty population")
         
-        if not hasattr(population, 'validate'):
-            raise ValueError(f"Type {type(population)} must have a validate method")
-        population.validate()
-        
+
+        if not isinstance(population, AbstractPopulation):
+            raise TypeError("Population must be an instance of AbstractPopulation")
+
         # Create the core mutation function
         core_fn = self._create_mutation_function()
         
@@ -106,34 +107,17 @@ class AbstractMutation(AbstractGeneticOperator[P], Generic[P]):
         mutation_fn = self.get_compiled_function()
         
         # Create subkeys for each solution
-        num_solutions = population.size
+        num_solutions = len(population)
         subkeys = jax.random.split(random_key, num_solutions)
         
         # Get all solutions and their genome data
-        solutions = population.get_solutions()
-        genomes = [solution.genome for solution in solutions]
-        genome_data = jnp.stack([genome.to_tensor() for genome in genomes])
+        genome_data = population.to_stack()
         
         # Apply the compiled mutation function - this is where the JIT magic happens
         mutated_genome_data = mutation_fn(genome_data, subkeys)
-        
-        # Create a new population with the same parameters
-        new_population = population.__class__(
-            solution_class=population.solution_class,
-            max_size=population.max_size,
-            random_init=False,
-            random_key=None
-        )
-        
-        # Create new solutions with mutated genomes
-        for i, solution in enumerate(solutions):
-            new_genome = solution.genome.__class__.from_tensor(
-                mutated_genome_data[i],
-            )
-            
-            new_solution = solution.clone()
-            new_solution.genome = new_genome
-            new_population.add_solution(new_solution)
+
+        # Create a new population from the mutated genome data
+        new_population = population.from_stack(mutated_genome_data)
         
         return new_population
 
@@ -149,3 +133,19 @@ class AbstractMutation(AbstractGeneticOperator[P], Generic[P]):
         if not self.built or self._compiled_fn is None:
             raise ValueError("Operator not built. Call build() first.")
         return self._compiled_fn
+    
+    def get_batched_function(self) -> Callable:
+        """Get the batched (vectorized) function before JIT compilation.
+        
+        Returns:
+            The batched function created during build().
+
+        Raises:
+            ValueError: If operator hasn't been built yet.
+        """
+        return jax.jit(jax.vmap(
+            lambda genome, key: self._create_mutation_function()(genome, key, self.mutation_rate),
+            in_axes=(0, 0)
+        ))
+        
+    

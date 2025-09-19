@@ -7,8 +7,14 @@ genome representations in evolutionary algorithms.
 
 from .base import AbstractGenome
 from .binary import BinaryGenome
+from .real import RealGenome
+from .categorical import CategoricalGenome
+from .permutation import PermutationGenome
 
 __all__ = [
     "AbstractGenome",
-    "BinaryGenome",    
+    "BinaryGenome",
+    "RealGenome",
+    "CategoricalGenome",
+    "PermutationGenome"
 ]

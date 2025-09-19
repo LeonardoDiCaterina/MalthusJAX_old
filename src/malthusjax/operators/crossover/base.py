@@ -31,7 +31,7 @@ class AbstractCrossover(AbstractGeneticOperator[P], Generic[P]):
         if not (0 <= crossover_rate <= 1):
             raise ValueError("Crossover rate must be between 0 and 1")
         self.crossover_rate = crossover_rate
-        
+        self._compiled_fn: Optional[Callable] = self._create_crossover_function()
     def build(self, population: P) -> Callable:
         """Build the corssover operator and return JIT-compiled function.
         
@@ -42,12 +42,9 @@ class AbstractCrossover(AbstractGeneticOperator[P], Generic[P]):
             JIT-compiled function with signature:
             (genome_data_array, random_keys_array, crossover_rate) -> crossed_genome_data_array
         """
-        if population.size == 0:
+        if len(population) == 0:
             raise ValueError("Cannot build crossover operator for empty population")
         
-        if not hasattr(population, 'validate'):
-            raise ValueError(f"Type {type(population)} must have a validate method")
-        population.validate()
         
         # Create the core crossover function
         core_fn = self._create_crossover_function()
@@ -72,36 +69,50 @@ class AbstractCrossover(AbstractGeneticOperator[P], Generic[P]):
         """
         pass
     
-    def call(self, population_or_stack: P | jax.Array, random_key: jax.Array, **kwargs) -> P | jax.Array:
-        """Apply crossover to the population or stack using the compiled function.
-
+        
+    def call(self, population: P, random_key: jax.Array, **kwargs) -> P:
+        """Apply mutation to the population using the compiled function.
+        
         Args:
-            population_or_stack: Input population or stack of genomes to cross.
+            population: Input population to mutate.
             random_key: JAX random key for reproducibility.
-
+            
         Returns:
-            New population or crossed stack.
+            New population with mutated individuals.
         """
-        # Determine if input is a population or a stack
-        is_population = hasattr(population_or_stack, "to_stack") and hasattr(population_or_stack, "from_stack")
+        if not self.built:
+            self.build(population)
+        
+        # Get the compiled function
+        crossover_fn = self.get_batched_function()
 
-        if is_population:
-            population = population_or_stack
-            if not self.built:
-                self.build(population)
-            crossover_fn = self.get_compiled_function()
-            num_solutions = len(population)
-            subkeys = jax.random.split(random_key, num_solutions)
-            genome_data = population.to_stack()
-            crossed_genome_data = crossover_fn(genome_data, subkeys)
-            new_population = population.from_stack(crossed_genome_data)
-            return new_population
-        else:
-            genome_data = population_or_stack
-            num_solutions = genome_data.shape[0]
-            subkeys = jax.random.split(random_key, num_solutions)
-            if not self.built:
-                raise RuntimeError("Crossover operator must be built with a population before calling with a stack.")
-            crossover_fn = self.get_compiled_function()
-            crossed_genome_data = crossover_fn(genome_data, subkeys)
-            return crossed_genome_data
+        # Create subkeys for each solution
+        num_solutions = len(population)
+        subkeys = jax.random.split(random_key, num_solutions)
+        
+        # Get all solutions and their genome data
+        genome_data = population.to_stack()
+        
+        # Apply the compiled crossover function - this is where the JIT magic happens
+        crossed_genome_data = crossover_fn(genome_data, subkeys)
+
+        # Create a new population from the mutated genome data
+        new_population = population.from_stack(crossed_genome_data)
+        
+        return new_population
+
+    def get_batched_function(self) -> Callable:
+        """Get the batched (vectorized) function before JIT compilation.
+        
+        Returns:
+            The batched function created during build().
+
+        """
+        crossover_fn = self.get_compiled_function()
+        # Vectorized crossover function
+        def vectorized_crossover(pop1_stack: jax.Array, random_keys: jax.Array) -> jax.Array:
+            #shuffle the second population to create pairs
+            pop2_stack = jax.random.permutation(random_keys[0], pop1_stack, axis=0)
+            return jax.vmap(crossover_fn)(pop1_stack, pop2_stack, random_keys)
+
+        return vectorized_crossover

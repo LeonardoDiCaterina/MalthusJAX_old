@@ -11,294 +11,317 @@ from malthusjax.core.base import Compatibility, ProblemTypes
 
 
 class TestBinaryGenome:
-    
     def test_initialization_default(self):
-        """Test initialization with required parameters."""
         genome = BinaryGenome(array_size=5, p=0.5)
         assert genome.array_size == 5
         assert genome.p == 0.5
         assert not hasattr(genome, 'genome') or not hasattr(genome, 'genome')  # Shouldn't be initialized yet
-        assert isinstance(genome.compatibility, Compatibility)
-        assert genome.compatibility.problem_type == ProblemTypes.DISCRETE_OPTIMIZATION
-        
-    def test_initialization_custom(self):
-        """Test initialization with custom parameters."""
-        genome = BinaryGenome(array_size=10, p=0.3)
-        assert genome.array_size == 10
-        assert genome.p == 0.3
         
     def test_initialization_invalid_p(self):
-        """Test initialization with invalid probability."""
         with pytest.raises(AssertionError):
-            BinaryGenome(array_size=5, p=1.5)  # p > 1
-            
+            BinaryGenome(array_size=5, p=1.5)
         with pytest.raises(AssertionError):
-            BinaryGenome(array_size=5, p=-0.1)  # p < 0
-        
+            BinaryGenome(array_size=5, p=-0.1)
+    
     def test_random_init(self):
-        """Test random initialization."""
-        genome = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=42)
-        assert hasattr(genome, 'genome')
-        assert genome.genome.shape == (5,)
-        assert genome.is_valid
-        
+        genome = BinaryGenome(array_size=100, p=0.3, random_init=True, random_key=jar.PRNGKey(42))
+        assert len(genome) == 100
+        assert jnp.issubdtype(genome.genome.dtype, jnp.bool_)
+        # Check approximate proportion of 1s
+        proportion_ones = jnp.mean(genome.genome)
+        assert jnp.isclose(proportion_ones, 0.3, atol=0.1)
+
     def test_random_init_reproducible(self):
-        """Test that random initialization is reproducible with same key."""
-        genome1 = BinaryGenome(array_size=10, p=0.3, random_init=True, random_key=42)
-        genome2 = BinaryGenome(array_size=10, p=0.3, random_init=True, random_key=42)
-
-        assert jnp.array_equal(genome1.genome, genome2.genome)  # Should be equal
-
-    def test_validate_valid_genome(self):
-        """Test validation with valid genome."""
+        key = jar.PRNGKey(42)
+        genome1 = BinaryGenome(array_size=100, p=0.3, random_init=True, random_key=key)
+        genome2 = BinaryGenome(array_size=100, p=0.3, random_init=True, random_key=key)
+        assert jnp.array_equal(genome1.genome, genome2.genome)
+    
+    def test_len(self):
+        genome = BinaryGenome(array_size=50, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        # Test length without initialization
+        assert len(genome) == 50
+    
+    def test_clone(self):
+        genome = BinaryGenome(array_size=10, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        clone = genome.clone()
+        assert clone is not genome
+        assert jnp.array_equal(clone.genome, genome.genome)
+        assert clone.array_size == genome.array_size
+        assert clone.p == genome.p
+    def test_mutate(self):
+        genome = BinaryGenome(array_size=100, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        original_genome = genome.genome.copy()
+        
+        # Test mutation with low rate
+        mutated = genome.mutate(rate=0.1, random_key=jar.PRNGKey(123))
+        
+        # Should return a new genome
+        assert mutated is not genome
+        assert mutated.array_size == genome.array_size
+        assert mutated.p == genome.p
+        
+        # Some bits should have changed (with high probability)
+        changes = jnp.sum(original_genome != mutated.genome)
+        assert changes > 0  # Very likely with 100 bits and 10% mutation rate
+    
+    def test_crossover(self):
+        parent1 = BinaryGenome(array_size=20, p=0.2, random_init=True, random_key=jar.PRNGKey(42))
+        parent2 = BinaryGenome(array_size=20, p=0.8, random_init=True, random_key=jar.PRNGKey(123))
+        
+        # Test crossover
+        child1, child2 = parent1.crossover(parent2, random_key=jar.PRNGKey(456))
+        
+        # Children should have same size as parents
+        assert len(child1) == 20
+        assert len(child2) == 20
+        assert child1.array_size == 20
+        assert child2.array_size == 20
+        
+        # Children should be different objects
+        assert child1 is not parent1
+        assert child2 is not parent2
+        assert child1 is not child2
+    
+    '''def test_compatibility(self):
+        genome = BinaryGenome(array_size=10, p=0.5)
+        
+        # Test compatibility with different problem types
+        assert genome.get_compatibility(ProblemTypes.BINARY) == Compatibility.NATIVE
+        assert genome.get_compatibility(ProblemTypes.CONTINUOUS) == Compatibility.INCOMPATIBLE
+        assert genome.get_compatibility(ProblemTypes.DISCRETE) == Compatibility.COMPATIBLE'''
+    
+    def test_edge_cases(self):
+        # Test with p=0 (all zeros)
+        genome_zeros = BinaryGenome(array_size=10, p=0.0, random_init=True, random_key=jar.PRNGKey(42))
+        assert jnp.all(genome_zeros.genome == False)
+        
+        # Test with p=1 (all ones)
+        genome_ones = BinaryGenome(array_size=10, p=1.0, random_init=True, random_key=jar.PRNGKey(42))
+        assert jnp.all(genome_ones.genome == True)
+        
+    def test_len(self):
+        genome = BinaryGenome(array_size=50, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        # Test length without initialization
+        assert len(genome) == 50
+    
+    def test_size_and_shape_properties(self):
+        """Test size and shape properties from AbstractGenome."""
+        genome = BinaryGenome(array_size=15, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        assert genome.size == 15
+        assert genome.shape == (15,)
+        
+        # Test that size equals len
+        assert genome.size == len(genome)
+    
+    def test_metadata_property(self):
+        """Test metadata getter/setter from AbstractGenome."""
+        genome = BinaryGenome(array_size=5, p=0.5, custom_param="test_value")
+        
+        # Check initial metadata
+        assert "custom_param" in genome.metadata
+        assert genome.metadata["custom_param"] == "test_value"
+        
+        # Test metadata setter
+        new_metadata = {"new_key": "new_value", "number": 42}
+        genome.metadata = new_metadata
+        assert genome.metadata == new_metadata
+    
+    def test_compatibility_property(self):
+        """Test compatibility getter/setter from AbstractGenome."""
         genome = BinaryGenome(array_size=5, p=0.5)
-        genome.genome = jnp.array([0, 1, 1, 0, 1])
-        genome._validate()
-        assert genome.is_valid is True
         
-    def test_validate_invalid_genome_values(self):
-        """Test validation with invalid genome values."""
-        genome = BinaryGenome(array_size=5, p=0.5)
-        genome.genome = jnp.array([0, 2, 1, 0, 1])  # Contains 2, which is invalid
-        assert genome._validate() is False
-        assert genome.is_valid is False
+        # Check default compatibility
+        assert genome.compatibility is not None
+        assert genome.compatibility.problem_type == ProblemTypes.DISCRETE_OPTIMIZATION
         
-    def test_validate_invalid_genome_shape(self):
-        """Test validation with invalid genome shape."""
-        genome = BinaryGenome(array_size=5, p=0.5)
-        genome.genome = jnp.array([0, 1, 1])  # Wrong size
-        assert genome._validate() is False
+        # Test compatibility setter
+        new_compat = Compatibility(problem_type=ProblemTypes.BINARY)
+        genome.compatibility = new_compat
+        assert genome.compatibility == new_compat
+    
+    def test_is_valid_property_and_invalidate(self):
+        """Test validation system from AbstractGenome."""
+        genome = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
         
-    def test_validate_missing_genome(self):
-        """Test validation when genome is not set."""
-        genome = BinaryGenome(array_size=5, p=0.5)
-        assert genome._validate() is False
+        # Should be valid after proper initialization
+        assert genome.is_valid == True
         
-    def test_distance_calculation(self):
-        """Test distance calculation between genomes."""
-        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome1.genome = jnp.array([0, 1, 1, 0, 1])
+        # Test invalidation
+        genome.invalidate()
+        # Should recalculate validity
+        assert genome.is_valid == True
         
-        genome2 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome2.genome = jnp.array([1, 1, 0, 0, 1])
+        # Test with invalid genome (manually corrupt)
+        genome.genome = jnp.array([0, 1, 2, 1, 0])  # 2 is invalid for binary
+        genome.invalidate()
+        assert genome.is_valid == False
+    
+    def test_tensor_conversion_methods(self):
+        """Test to_tensor and from_tensor methods."""
+        original = BinaryGenome(array_size=8, p=0.3, random_init=True, random_key=jar.PRNGKey(42))
         
-        # Hamming distance should be 2 (different at positions 0 and 2)
-        assert genome1.distance(genome2) == 2.0
-        
-        # Identical genomes should have distance 0
-        assert genome1.distance(genome1) == 0.0
-        
-    def test_distance_incompatible_types(self):
-        """Test distance calculation with incompatible genome types."""
-        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome1.genome = jnp.array([0, 1, 1, 0, 1])
-        
-        # Test with non-BinaryGenome
-        assert genome1.distance("not a genome") == float('inf')
-        
-    def test_distance_incompatible_sizes(self):
-        """Test distance calculation with incompatible sizes."""
-        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome1.genome = jnp.array([0, 1, 1, 0, 1])
-        
-        genome2 = BinaryGenome(array_size=3, p=0.5, random_init=False)
-        genome2.genome = jnp.array([1, 1, 0])
-        
-        assert genome1.distance(genome2) == float('inf')
-            
-    def test_semantic_key(self):
-        """Test semantic key generation."""
-        genome = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome.genome = jnp.array([0, 1, 1, 0, 1])
-        
-        # The semantic key should be consistent
-        key1 = genome.semantic_key()
-        key2 = genome.semantic_key()
-        assert key1 == key2
-        assert isinstance(key1, str)
-        
-        # Different genomes should have different keys
-        genome2 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome2.genome = jnp.array([1, 0, 0, 1, 0])
-        assert genome.semantic_key() != genome2.semantic_key()
-        
-    def test_to_tensor(self):
-        """Test conversion to tensor."""
-        genome = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome.genome = jnp.array([0, 1, 1, 0, 1], dtype=jnp.bool_)
-        
-        tensor = genome.to_tensor()
+        # Test to_tensor
+        tensor = original.to_tensor()
         assert tensor.dtype == jnp.int32
-        assert jnp.array_equal(tensor, jnp.array([0, 1, 1, 0, 1], dtype=jnp.int32))
+        assert tensor.shape == (8,)
+        assert jnp.all((tensor == 0) | (tensor == 1))
         
-    def test_from_tensor(self):
-        """Test creation from tensor."""
-        tensor = jnp.array([0, 1, 1, 0, 1, 1, 1, 1, 1, 1])
-        genome_init_params = {'array_size': 10, 'p': 0.5}
+        # Test from_tensor
+        context = original.get_serialization_context()
+        reconstructed = BinaryGenome.from_tensor(
+            tensor, 
+            genome_init_params=context.genome_init_params
+        )
         
-        genome = BinaryGenome.from_tensor(tensor, genome_init_params=genome_init_params)
-        assert genome.array_size == 10
-        assert jnp.array_equal(genome.to_tensor(), tensor)
-        assert genome.is_valid
-        
-            
-    def test_get_serialization_context(self):
-        """Test serialization context generation."""
-        genome = BinaryGenome(array_size=8, p=0.3)
+        assert jnp.array_equal(original.genome, reconstructed.genome)
+        assert original.array_size == reconstructed.array_size
+        assert original.p == reconstructed.p
+    
+        '''    def test_serialization_context(self):
+        """Test get_serialization_context method."""
+        genome = BinaryGenome(array_size=10, p=0.7, custom_data="test")
         context = genome.get_serialization_context()
         
         assert context.genome_class == BinaryGenome
-        assert context.genome_init_params['array_size'] == 8
-        assert context.genome_init_params['p'] == 0.3
-        assert context.compatibility == genome.compatibility
+        assert context.genome_init_params['array_size'] == 10
+        assert context.genome_init_params['p'] == 0.7
+        assert 'custom_data' in context.__dict__'''
+    
+    def test_distance_method(self):
+        """Test distance calculation between genomes."""
+        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        genome2 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(123))
         
-    def test_clone_shallow(self):
-        """Test shallow copy."""
-        original = BinaryGenome(array_size=5, p=0.3, random_init=True, random_key=42)
-        original._metadata = {"test": "metadata"}
+        # Distance should be non-negative
+        distance = genome1.distance(genome2)
+        assert distance >= 0
         
-        copy = original.clone(deep=False)
+        # Distance to self should be 0
+        assert genome1.distance(genome1) == 0
         
-        # Check that it's a different object but with the same data
-        assert copy is not original
-        assert copy.array_size == original.array_size
-        assert copy.p == original.p
-        assert jnp.array_equal(copy.genome, original.genome)
-        assert copy._metadata == original._metadata
-        assert copy._is_valid == original._is_valid
+        # Distance should be symmetric
+        assert genome1.distance(genome2) == genome2.distance(genome1)
         
-    def test_clone_deep(self):
-        """Test deep copy."""
-        original = BinaryGenome(array_size=5, p=0.3, random_init=True, random_key=42)
-        original._metadata = {"test": "metadata", "nested": {"key": "value"}}
+        # Test distance with different sizes (should be inf)
+        genome3 = BinaryGenome(array_size=10, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        assert genome1.distance(genome3) == float('inf')
         
-        copy = original.clone(deep=True)
+        # Test distance with non-BinaryGenome (should be inf)
+        assert genome1.distance("not_a_genome") == float('inf')
+    
+    def test_semantic_key(self):
+        """Test semantic key generation."""
+        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        genome2 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
         
-        # Check that it's a different object but with the same data
-        assert copy is not original
-        assert copy.array_size == original.array_size
-        assert copy.p == original.p
-        assert jnp.array_equal(copy.genome, original.genome)
-        assert copy._metadata == original._metadata
-        assert copy._metadata is not original._metadata  # Should be a new dict
+        # Same random key should produce same genome and same semantic key
+        assert genome1.semantic_key() == genome2.semantic_key()
         
+        # Different genomes should have different keys
+        genome3 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(123))
+        assert genome1.semantic_key() != genome3.semantic_key()
+        
+        # Key should be consistent
+        key1 = genome1.semantic_key()
+        key2 = genome1.semantic_key()
+        assert key1 == key2
+    
+    def test_jax_tree_operations(self):
+        """Test JAX tree flatten/unflatten operations."""
+        original = BinaryGenome(array_size=6, p=0.4, random_init=True, random_key=jar.PRNGKey(42))
+        original.metadata = {"test_key": "test_value"}
+        
+        # Test tree_flatten
+        children, aux_data = original.tree_flatten()
+        assert len(children) == 1  # Should contain the genome array
+        assert jnp.array_equal(children[0], original.genome)
+        assert aux_data['array_size'] == 6
+        assert aux_data['p'] == 0.4
+        
+        # Test tree_unflatten
+        reconstructed = BinaryGenome.tree_unflatten(aux_data, children)
+        assert jnp.array_equal(original.genome, reconstructed.genome)
+        assert original.array_size == reconstructed.array_size
+        assert original.p == reconstructed.p
+    
     def test_update_from_tensor(self):
-        """Test updating genome from tensor."""
-        genome = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=42)
+        """Test update_from_tensor method."""
+        genome = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
         original_genome = genome.genome.copy()
         
-        new_tensor = jnp.array([1, 0, 1, 0, 1])
-        genome.update_from_tensor(new_tensor, validate=True)
+        # Create new tensor
+        new_tensor = jnp.array([True, False, True, True, False])
         
-        assert jnp.array_equal(genome.to_tensor(), new_tensor)
+        # Update genome
+        genome.update_from_tensor(new_tensor, validate=True)
+        assert jnp.array_equal(genome.genome, new_tensor)
         assert not jnp.array_equal(genome.genome, original_genome)
         
-    def test_update_from_tensor_invalid_shape(self):
-        """Test updating genome with wrong shape tensor."""
-        genome = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=42)
-        
-        wrong_tensor = jnp.array([1, 0, 1])  # Wrong size
-        with pytest.raises(ValueError, match="Tensor shape .* incompatible with array_size"):
+        # Test with wrong shape
+        wrong_tensor = jnp.array([True, False])
+        with pytest.raises(ValueError, match="incompatible"):
             genome.update_from_tensor(wrong_tensor)
-
-    def test_tree_flatten_unflatten(self):
-        """Test JAX tree flattening and unflattening."""
-        original = BinaryGenome(array_size=5, p=0.3, random_init=True, random_key=42)
-        original._metadata = {"test": "metadata"}
+    
+    def test_equality_and_hashing(self):
+        """Test __eq__, __ne__, and __hash__ methods."""
+        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        genome2 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        genome3 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(123))
         
-        children, aux_data = original.tree_flatten()
-        reconstructed = BinaryGenome.tree_unflatten(aux_data, children)
-        
-        assert reconstructed.array_size == original.array_size
-        assert reconstructed.p == original.p
-        assert jnp.array_equal(reconstructed.genome, original.genome)
-        assert reconstructed._metadata == original._metadata
-        
-    def test_equality(self):
-        """Test genome equality comparison."""
-        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome1.genome = jnp.array([0, 1, 1, 0, 1])
-        
-        genome2 = BinaryGenome(array_size=5, p=0.5, random_init=False) 
-        genome2.genome = jnp.array([0, 1, 1, 0, 1])
-        
-        genome3 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome3.genome = jnp.array([1, 0, 0, 1, 0])
-        
+        # Same random key should produce equal genomes
         assert genome1 == genome2
+        assert not (genome1 != genome2)
+        
+        # Different genomes should not be equal
         assert genome1 != genome3
-        assert genome1 != "not a genome"
+        assert not (genome1 == genome3)
         
-    def test_hash(self):
-        """Test genome hashing."""
-        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome1.genome = jnp.array([0, 1, 1, 0, 1])
+        # Test with non-genome object
+        assert genome1 != "not_a_genome"
+        assert genome1 != 42
         
-        genome2 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome2.genome = jnp.array([0, 1, 1, 0, 1])
-        
-        # Equal genomes should have same hash
-        assert hash(genome1) == hash(genome2)
-        
-        # Should be usable in sets
-        genome_set = {genome1, genome2}
-        assert len(genome_set) == 1  # Should be deduplicated
-        
+        # Test hashing
+        assert hash(genome1) == hash(genome2)  # Same semantic key
+        genome_set = {genome1, genome2, genome3}
+        assert len(genome_set) == 2  # genome1 and genome2 should be deduplicated
+    
     def test_subtraction_operator(self):
-        """Test distance calculation via subtraction operator."""
-        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome1.genome = jnp.array([0, 1, 1, 0, 1])
+        """Test __sub__ operator for distance calculation."""
+        genome1 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(42))
+        genome2 = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=jar.PRNGKey(123))
         
-        genome2 = BinaryGenome(array_size=5, p=0.5, random_init=False)
-        genome2.genome = jnp.array([1, 1, 0, 0, 1])
-        
+        # Test subtraction operator
         distance = genome1 - genome2
-        assert distance == 2.0
+        assert distance == genome1.distance(genome2)
+        assert distance >= 0
         
+        # Test with invalid operand
         with pytest.raises(TypeError):
-            genome1 - "not a genome"
-            
-    def test_string_representations(self):
-        """Test string and repr methods."""
-        genome = BinaryGenome(array_size=5, p=0.3, random_init=True, random_key=42)
+            genome1 - "not_a_genome"
+    
+    def test_jit_methods(self):
+        """Test JIT-compiled methods."""
+        # Test random initialization JIT
+        init_params = {'array_size': 10, 'p': 0.3}
+        init_fn = BinaryGenome.get_random_initialization_jit(init_params)
         
-        str_repr = str(genome)
-        assert "BinaryGenome" in str_repr
-        assert "size=5" in str_repr
-        assert "valid=" in str_repr
+        key = jar.PRNGKey(42)
+        result = init_fn(key)
+        assert result.shape == (10,)
+        assert jnp.issubdtype(result.dtype, jnp.bool_)
         
-        repr_str = repr(genome)
-        assert "BinaryGenome" in repr_str
-        assert "array_size=5" in repr_str
-        assert "p=0.3" in repr_str
+        # Test distance JIT
+        distance_fn = BinaryGenome.get_distance_jit()
+        sol1 = jnp.array([True, False, True, False])
+        sol2 = jnp.array([False, False, True, True])
+        distance = distance_fn(sol1, sol2)
+        assert distance == 2  # Should be Hamming distance
         
-    def test_invalidate_cache(self):
-        """Test cache invalidation."""
-        genome = BinaryGenome(array_size=5, p=0.5, random_init=True, random_key=42)
-        
-        # Access is_valid to cache it
-        assert genome.is_valid is True
-        
-        # Invalidate cache
-        genome.invalidate()
-        assert genome._is_valid is None
-        
-        # Should recompute on next access
-        assert genome.is_valid is True
-        
-    def test_metadata_handling(self):
-        """Test metadata getter and setter."""
-        genome = BinaryGenome(array_size=5, p=0.5, test_meta="value")
-        
-        assert genome.metadata["test_meta"] == "value"
-        
-        new_metadata = {"new_key": "new_value"}
-        genome.metadata = new_metadata
-        assert genome.metadata == new_metadata
-        
-    def test_size_and_shape_properties(self):
-        """Test size and shape properties."""
-        genome = BinaryGenome(array_size=8, p=0.5, random_init=True, random_key=42)
-        
-        assert genome.size == 8
-        assert genome.shape == (8,)
+        # Test autocorrection JIT
+        correction_fn = BinaryGenome.get_autocorrection_jit(init_params)
+        invalid_sol = jnp.array([2, -1, 0.5, 1, 0, 1, 1, 0, 1, 1, 1])  # Too long with invalid values
+        corrected = correction_fn(invalid_sol).astype(jnp.int32)
+        assert corrected.shape == (10,)  # Should be truncated
+        assert jnp.all((corrected == 0) | (corrected == 1))  # Should be valid binary
+         

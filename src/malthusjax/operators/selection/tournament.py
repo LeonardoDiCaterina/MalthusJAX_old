@@ -24,11 +24,13 @@ class TournamentSelection(AbstractSelectionOperator[P], Generic[P]):
     """
 
     def __init__(self, number_of_tournaments: int = 10, tournament_size: int = 4) -> None:
-        super().__init__()
+        #self._init_kwargs = {'number_of_tournaments': number_of_tournaments, 'tournament_size': tournament_size}
         self.number_of_tournaments = number_of_tournaments
         self.tournament_size = tournament_size
-    
-    def _create_selection_function(self, pop_size:int) -> Callable:
+        super().__init__()
+
+
+    def _create_selection_function(self) -> Callable:
         """Create the core tournament selection function to be vectorized and JIT-compiled.
         
         Returns:
@@ -53,7 +55,7 @@ class TournamentSelection(AbstractSelectionOperator[P], Generic[P]):
                 key, 
                 (number_of_tournaments, tournament_size), 
                 0, 
-                pop_size
+                fitness_scores.shape[0]
             )
             
             # Get fitness values for tournament participants
@@ -67,36 +69,4 @@ class TournamentSelection(AbstractSelectionOperator[P], Generic[P]):
 
             return tournament_winners
         return tournament_selection
-    
-    def call(self, population: P, random_key: jax.Array, **kwargs) -> P:
-        """Apply tournament selection to the population using the compiled function.
-        
-        Args:
-            population: Input population to select from.
-            random_key: JAX random key for reproducibility.
-            
-        Returns:
-            New population with selected individuals.
-        """
-        if not self.built:
-            self.build(population)
-        
-        # Get the compiled function
-        selection_fn = self.get_compiled_function()
-        
-        # Create subkeys for each solution        
-        # Evaluate fitness scores for the genomes
-        fitness_scores = population.get_fitness_values()
-
-        # Apply the compiled selection function - this is where the JIT magic happens
-        tournament_winners_indices = selection_fn(fitness_scores, random_key)
-
-        # Select the winning genomes using the indices
-        winning_genomes = [population[i] for i in tournament_winners_indices]
-
-
-        # Create a new population with the selected genomes
-        new_population = population.from_solution_list(winning_genomes)
-
-        return new_population
         

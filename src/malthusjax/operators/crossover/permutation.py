@@ -7,28 +7,6 @@ import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
 
 
-class UniformCrossover(AbstractCrossover):
-    """Uniform crossover operator that randomly selects genes from two parents.
-    
-    This operator uses a uniform mask to determine which genes to take from each parent.
-    """
-    
-    def _create_crossover_function(self) -> Callable:
-        """Create the core crossover function for uniform crossover."""
-        crossover_rate = self.crossover_rate  # Capture as closure
-        
-        @partial(jax.jit, static_argnames=())
-        def crossover(genome_data1: jax.Array, genome_data2: jax.Array, random_key: jax.Array) -> jax.Array:  
-            """Perform uniform crossover on a single genome."""
-            # Generate a random mask based on the crossover rate
-            mask = jar.bernoulli(random_key, p=self.crossover_rate, shape=genome_data1.shape)
-            # Combine the two genomes using the mask
-            crossed_genome = jnp.where(mask, genome_data1, genome_data2)
-            return crossed_genome
-
-        
-        return crossover
-    
 class CycleCrossover(AbstractCrossover):
     """Cycle crossover operator that creates offspring by following cycles in the parent genomes.
     
@@ -68,30 +46,9 @@ class CycleCrossover(AbstractCrossover):
 
         return crossover
     
-    
 
-class SinglePointCrossover(AbstractCrossover):
-    """Single point crossover operator that randomly selects a crossover point.
-    
-    This operator uses a single crossover point to exchange genetic material between two parents.
-    """
-    
-    def _create_crossover_function(self) -> Callable:
-        """Create the core crossover function for single point crossover."""
-        crossover_rate = self.crossover_rate  # Capture as closure
-        @partial(jax.jit, static_argnames=())
-        def crossover(genome_data1: jax.Array, genome_data2: jax.Array, random_key: jax.Array) -> jax.Array:
-            """Perform single point crossover on two genomes."""
-            # Select a random crossover point
-            crossover_point = jar.randint(random_key, (), 0, genome_data1.shape[0])
-            # Create a mask for the crossover point
-            mask = jnp.arange(genome_data1.shape[0]) < crossover_point
-            # Combine the two genomes using the mask
-            crossed_genome = jnp.where(mask, genome_data1, genome_data2)
 
-            return crossed_genome
 
-        return crossover
 
 
 class PillarCrossover(AbstractCrossover):

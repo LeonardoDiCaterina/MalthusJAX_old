@@ -94,6 +94,8 @@ class SinglePointCrossover(AbstractCrossover):
         return crossover
 
 
+
+
 class PillarCrossover(AbstractCrossover):
     """Pillar point crossover operator keeps the genes in common between two parents and shuffles the rest.
     

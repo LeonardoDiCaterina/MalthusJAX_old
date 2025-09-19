@@ -5,65 +5,72 @@ import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
 
 from malthusjax.core.base import SerializationContext
-from malthusjax.core.solution.base import AbstractSolution
+from malthusjax.core.genome.base import AbstractGenome
 from malthusjax.core.population.base import AbstractPopulation
+#from malthusjax.core.fitness.base import AbstractFitnessEvaluator
 
-T = TypeVar('T', bound=AbstractSolution)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from malthusjax.core.fitness.base import AbstractFitnessEvaluator
+
+T = TypeVar('T', bound=AbstractGenome)
 
 class Population(AbstractPopulation[T], Generic[T]):
     """Standard population implementation for genetic algorithms."""
 
-    def __init__(self, solution_class: type[T], max_size: int, random_key: Optional[jar.PRNGKey] = None, context: Optional[SerializationContext] = None, random_init: bool = True, genome_init_params: Dict = {}, fitness_transform = None) -> None:
-        """Initialize the population with a solution class and maximum size.
-        
+    def __init__(self, genome_cls: type[T], pop_size: int, random_key: Optional[jar.PRNGKey] = None, context: Optional[SerializationContext] = None, random_init: bool = True, genome_init_params: Dict = {}, fitness_transform = None) -> None:
+        """Initialize the population with a genome class and maximum size.
+
         Args:
-            solution_class: Class of solutions to be managed in the population.
-            max_size: Maximum number of solutions in the population.
+            genome_cls: Class of genomes to be managed in the population.
+            pop_size: Maximum number of genomes in the population.
             random_key: Optional JAX random key for random initialization.
             random_init: Whether to randomly initialize the population.
         """
-        self._solutions: List[T] = []
+        self._genomes:jnp.ndarray = jnp.empty((0,), dtype= int)
+        self._fitness_values: jnp.ndarray = jnp.array([])
         self.genome_init_params = genome_init_params
         self._random_key = random_key
-        super().__init__(solution_class = solution_class, max_size = max_size, random_key = random_key, context = context, random_init = random_init, genome_init_params = genome_init_params, fitness_transform = fitness_transform)
-        self._best_solution: Optional[T] = None
+        super().__init__(genome_cls=genome_cls, pop_size=pop_size, random_key=random_key, context=context, random_init=random_init, genome_init_params=genome_init_params, fitness_transform=fitness_transform)
+        self._best_genome: Optional[T] = None
 
-            
-    def add_solution(self, solution: T) -> None:
-        """Add a solution to the population.
-        
+    def add_genome(self, genome: T) -> None:
+        """Add a genome to the population.
+
         Args:
-            solution: Solution to add to the population.
-            
+            genome: Genome to add to the population.
+        
         Raises:
             ValueError: If population is already at max capacity.
         """
-        if len(self._solutions) >= self.max_size:
-            raise ValueError(f"Population already at maximum capacity: {self.max_size}")
-        
-        self._solutions.append(solution)
-        self._best_solution = None
+        if self._genomes is None:
+            self._genomes = []
+        elif len(self._genomes) >= self._pop_size:
+            raise ValueError(f"Population already at maximum capacity: {self._pop_size}")
 
-    def get_solutions(self) -> List[T]:
-        """Get all solutions in the population.
-        
+        self._genomes.append(genome)
+        self._best_genome = None
+
+    def get_genomes(self) -> List[T]:
+        """Get all genomes in the population.
+
         Returns:
-            List of all solutions currently in the population.
+            List of all genomes currently in the population.
         """
-        return self._solutions
-    
+        return self._genomes
+
     def get_fitness_values(self) -> jnp.ndarray:
-        """Get fitness values of all solutions in the population.
-        
+        """Get fitness values of all genomes in the population.
+
         Returns:
-            Array of fitness values for each solution.
+            Array of fitness values for each genome.
         """
-        if not self._solutions:
+        if self._genomes is None or len(self._genomes) == 0:
             return jnp.array([])
-        
-        return jnp.array([s.fitness for s in self._solutions])
-    
-    def get_best_solution(self) -> T:
+
+        return self._fitness_values
+
+    def get_best_genome(self) -> T:
         """Get the best solution in the population.
         
         Returns:
@@ -72,15 +79,19 @@ class Population(AbstractPopulation[T], Generic[T]):
         Raises:
             ValueError: If population is empty.
         """
-        if not self._solutions:
+        if self._genomes is None or len(self._genomes) == 0:
             raise ValueError("Cannot get best solution from empty population")
         
-        if self._best_solution is None:
-            # This should only happen if solutions were added without fitness values
-            # Sort and return the best
-            return sorted(self._solutions, reverse=True)[0]
+        if len(self._genomes) != len(self._fitness_values):
+            raise ValueError("Fitness values are not up to date with genomes")
         
-        return self._best_solution
+        if self._best_genome is None:
+            best_idx = jnp.argmax(self._fitness_values)
+            best_genome = self._genomes[int(best_idx)]
+            self._best_genome = self._genome_cls.from_tensor(best_genome, self.get_genome_init_params())
+            self._best_genome._fitness = self._fitness_values[int(best_idx)]
+
+        return self._best_genome
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get population statistics.
@@ -94,7 +105,7 @@ class Population(AbstractPopulation[T], Generic[T]):
             - 'fitness_std': Standard deviation of fitness values
             -
         """
-        if not self._solutions:
+        if not self._genomes:
             return {
                 'pop_size': 0,
                 'max_fitness': None,
@@ -106,7 +117,7 @@ class Population(AbstractPopulation[T], Generic[T]):
         fitness_values = jnp.array([s.fitness for s in self._solutions])
         
         return {
-            'pop_size': len(self._solutions),
+            'pop_size': len(self._genomes),
             'max_fitness': float(jnp.max(fitness_values)),
             'min_fitness': float(jnp.min(fitness_values)),
             'avg_fitness': float(jnp.mean(fitness_values)),
@@ -115,21 +126,21 @@ class Population(AbstractPopulation[T], Generic[T]):
             '50th_percentile': float(jnp.percentile(fitness_values, 50)),
             '75th_percentile': float(jnp.percentile(fitness_values, 75))
         }
-    
-    def update_fitness(self, fitness_evaluator) -> None:
+
+    def update_fitness(self, fitness_evaluator: 'AbstractFitnessEvaluator') -> None:
         """Update fitness of all solutions in the population.
         
         Args:
             fitness_evaluator: Fitness evaluator to use for updating fitness values.
         """
-        if not self._solutions:
+        if not self._genomes:
             return
-        
-        fitness_evaluator.evaluate_solutions(self._solutions)
-        
+
+        fitness_evaluator.evaluate_solutions(self._genomes)
+
         # Update best solution
-        self._best_solution = sorted(self._solutions, reverse=True)[0]
-    
+        self._best_solution = sorted(self._genomes, reverse=True)[0]
+
     @property
     def size(self) -> int:
         """Get the current population size.
@@ -137,7 +148,9 @@ class Population(AbstractPopulation[T], Generic[T]):
         Returns:
             Current number of solutions in the population.
         """
-        return len(self._solutions)
+        if self._genomes is None:
+            return 0
+        return len(self._genomes)
     
 
     

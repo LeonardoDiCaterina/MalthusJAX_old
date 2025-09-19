@@ -7,10 +7,10 @@ for efficient batch operations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Dict
+from typing import Any, Callable, Optional, Dict
 import jax.numpy as jnp  # type: ignore
 from jax import Array  # type: ignore
-
+import jax  # type: ignore
 from ..base import JAXTensorizable, Compatibility, ProblemTypes, SerializationContext
 
 class AbstractGenome(JAXTensorizable, ABC):
@@ -51,7 +51,8 @@ class AbstractGenome(JAXTensorizable, ABC):
         if random_init:
             self._random_init()
             if not self.is_valid:
-                raise ValueError("Random initialization produced invalid genome")
+                raise ValueError(f"Random initialization produced invalid genome: {self.to_tensor()}")
+        self._fitness: Optional[float] = None  # Fitness value, to be set externally
 
     @property
     def size(self) -> int:
@@ -89,12 +90,27 @@ class AbstractGenome(JAXTensorizable, ABC):
         if self._is_valid is None:
             self._is_valid = self._validate()
         return self._is_valid
+    
+    @property
+    def fitness(self) -> Optional[float]:
+        """Get the fitness value of the genome."""
+        return self._fitness
+    @fitness.setter
+    def fitness(self, value: float) -> None:
+        """Set the fitness value of the genome."""
+        self._fitness = value
 
     def invalidate(self) -> None:
         """Invalidate cached validation result."""
         self._is_valid = None
 
     # === Abstract methods that subclasses must implement ===
+    
+    @classmethod
+    @abstractmethod
+    def get_random_initialization_jit(cls, genome_init_params: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
+        """Get JIT-compiled function for random genome initialization that will receive a random key and return a tensor."""
+        pass
 
     @abstractmethod
     def _random_init(self) -> None:
@@ -110,12 +126,25 @@ class AbstractGenome(JAXTensorizable, ABC):
     def to_tensor(self) -> Array:
         """Convert the genome to a JAX tensor."""
         pass
+    # === JAX JIT Compatibility abstractions ===
+    
+    @classmethod
+    @abstractmethod
+    def get_distance_jit(self) -> Callable[[jax.Array, jax.Array], float]:
+        """Get JIT-compiled function to compute distance between two genomes."""
+        pass
+    
+    @classmethod
+    @abstractmethod
+    def get_autocorrection_jit(cls, genome_init_params: Dict[str, Any]) -> Callable[[jax.Array], jax.Array]:
+        """Get JIT-compiled function that turns invalid genomes into valid ones."""
+        pass
 
     @classmethod
     @abstractmethod
     def from_tensor(cls, 
                    tensor: Array,
-                   context: Optional[SerializationContext] = None,
+                   genome_init_params: Optional[Dict[str, Any]] = None,
                    **kwargs: Any) -> 'AbstractGenome':
         """Create a genome from a JAX tensor with standardized signature."""
         pass
@@ -184,6 +213,10 @@ class AbstractGenome(JAXTensorizable, ABC):
             raise ValueError("Updated genome is invalid")
 
     # === Standard object methods ===
+    
+    def __len__(self) -> int:
+        """Get the length of the genome tensor."""
+        return self.size
 
     def __eq__(self, other: object) -> bool:
         """Check if two genomes are equal."""

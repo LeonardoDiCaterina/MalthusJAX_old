@@ -94,6 +94,7 @@ class SinglePointCrossover(AbstractCrossover):
         return crossover
 
 
+
 class PillarCrossover(AbstractCrossover):
     """Pillar point crossover operator keeps the genes in common between two parents and shuffles the rest.
     
@@ -131,5 +132,30 @@ class PillarCrossover(AbstractCrossover):
                                     output)
             
             return output
+
+        return crossover
+    
+    
+class AverageCrossover(AbstractCrossover):
+    """Average crossover operator that averages the genes of two parents.
+    
+    This operator is suitable for real-valued genomes.
+    """
+    def __init__(self, crossover_rate = 0.01):
+        if crossover_rate < 0.0 or crossover_rate > 1.0:
+            raise ValueError(f"Crossover rate must be either 0.0 or 1.0 for AverageCrossover.\n Got {crossover_rate}")
+        super().__init__(crossover_rate)
+    
+    def _create_crossover_function(self) -> Callable:
+        """Create the core crossover function for average crossover."""
+        if self.crossover_rate > 1.0 or self.crossover_rate < 0.0:
+            raise ValueError(f"Crossover rate must be either 0.0 or 1.0 for AverageCrossover.\n Got {self.crossover_rate}")
+        crossover_rate = self.crossover_rate  # Capture as closure
+        @partial(jax.jit, static_argnames=())
+        def crossover(genome_data1: jax.Array, genome_data2: jax.Array, random_key: jax.Array) -> jax.Array:
+            """Perform average crossover on two genomes."""
+            # Average the two genomes
+            crossed_genome = (crossover_rate* genome_data1 + (1 - crossover_rate) * genome_data2)
+            return crossed_genome
 
         return crossover

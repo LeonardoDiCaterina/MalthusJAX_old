@@ -23,16 +23,20 @@ class RouletteSelection(AbstractSelectionOperator[P], Generic[P]):
     This operator selects individuals based on their fitness proportion.
     """
 
-    def __init__(self, number_choices=10) -> None:
-        super().__init__()
+    def __init__(self, number_choices: int) -> None:
         self.number_choices = number_choices
+        #self._init_kwargs = {'number_choices': number_choices}
+        super().__init__()
 
-    def _create_selection_function(self, pop_size:int) -> Callable:
+
+    def _create_selection_function(self) -> Callable:
         """Create the core roulette selection function to be vectorized and JIT-compiled.
         Returns:
             Function with signature (genome_data, random_key, selection_rate) -> selected_genome_data
         """
+        
         number_choices = self.number_choices
+        
         @jax.jit
         def roulette_selection(fitness_scores, key):
             """Roulette selection function that will be JIT compiled.
@@ -49,42 +53,10 @@ class RouletteSelection(AbstractSelectionOperator[P], Generic[P]):
             # Choose random indices based on the probabilities
             selected_indices = jax.random.choice(
             key, 
-            jnp.arange(pop_size), 
+            jnp.arange(fitness_scores.shape[0]), 
             shape=(number_choices,), 
             p=probabilities
             )
             return selected_indices     
         return roulette_selection
-
-    def call(self, population: P, random_key: jax.Array, **kwargs) -> P:
-        """Apply tournament selection to the population using the compiled function.
-        
-        Args:
-            population: Input population to select from.
-            random_key: JAX random key for reproducibility.
-            
-        Returns:
-            New population with selected individuals.
-        """
-        if not self.built:
-            self.build(population)
-        
-        # Get the compiled function
-        selection_fn = self.get_compiled_function()
-                
-        # Evaluate fitness scores for the genomes
-        fitness_scores = population.get_fitness_values()
-
-        # Apply the compiled selection function - this is where the JIT magic happens
-        tournament_winners_indices = selection_fn(fitness_scores, random_key)
-
-        # Select the winning genomes using the indices
-        winning_genomes = [population[i] for i in tournament_winners_indices]
-
-
-        # Create a new population with the selected genomes
-        new_population = population.from_solution_list(winning_genomes)
-
-        return new_population
-
 

@@ -4,10 +4,27 @@ from jax import Array # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax # type: ignore
 from .base import AbstractFitnessEvaluator
-from ..solution.base import AbstractSolution
     
 class BinarySumFitnessEvaluator(AbstractFitnessEvaluator):
+    """
+    Concrete fitness evaluator that extends AbstractFitnessEvaluator.
+    Computes fitness as the sum of ones in a binary genome.
+    """
+    
+    def __init__(self) -> None:
+        super().__init__()
+        self.name = "BinarySumFitnessEvaluator"
+
     def tensor_fitness_function(self, genome_tensor: Array) -> float:
+        """
+        JIT-compatible tensor-only fitness function that computes the sum of ones in the genome tensor.
+
+        Args:
+            genome_tensor (Array): JAX array representing the genome
+
+        Returns:
+            float: Fitness value as float
+        """
         return jnp.sum(genome_tensor)
 
         
@@ -32,10 +49,11 @@ class KnapsackFitnessEvaluator(AbstractFitnessEvaluator):
         self.weight_limit = weight_limit
         self.default_exceding_weight_penalization = default_exceding_weight_penalization
         super().__init__()
-    
+        self.name = "KnapsackFitnessEvaluator"
+
     def tensor_fitness_function(self, genome_tensor: Array) -> float:
         """
-        Tensor-only version of knapsack fitness function.
+        JIT-compatible tensor-only fitness function for knapsack problem.
         
         Args:
             genome_tensor: JAX array representing genome

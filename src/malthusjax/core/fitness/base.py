@@ -9,12 +9,11 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Callable
 import jax # type: ignore
 import jax.numpy as jnp # type: ignore
-from jax import Array  # type: ignore
+from jax import Array
+from malthusjax.core.population.base import AbstractPopulation  # type: ignore
 
 from ..base import JAXTensorizable, Compatibility
 from ..genome.base import AbstractGenome
-from ..solution.base import AbstractSolution
-
 
 class AbstractFitnessEvaluator(ABC):
     """
@@ -26,10 +25,11 @@ class AbstractFitnessEvaluator(ABC):
     
     def __init__(self):
         """Initialize the fitness evaluator."""
-        self._batch_fitness_fn: Optional[Callable] = None
-        self._compiled_for_shape: Optional[tuple] = None
+        self._tensor_fitness_fn: Optional[Callable] = self.get_tensor_fitness_function()
+        self._batch_fitness_fn: Optional[Callable] = self.get_batch_fitness_function()
+        
     
-    @abstractmethod  
+    @abstractmethod
     def tensor_fitness_function(self, genome_tensor: Array) -> float:
         """
         Abstract tensor-only version of fitness function for vectorized operations.
@@ -45,141 +45,136 @@ class AbstractFitnessEvaluator(ABC):
         """
         pass
     
-    def fitness_function(self, solution: AbstractSolution) -> float:
+    def debug_tensor_fitness_function(self, list_of_genome_edge_cases: List[Array], list_of_expected_fitness: List[float]) -> None:
         """
-        Evaluate a single solution's fitness.
-        
+        This method is meant to be used for checking the tensor fitness function outside of
+        the evolutionary loop.
+        It will check if the tensor_fitness_function can be jit-compiled and vectorized,
+        and will evaluate it on a list of edge case genomes, comparing the results to expected fitness
+        values.
         Args:
-            solution: The solution to evaluate
+            list_of_genome_edge_cases: List of genome tensors to test
+            list_of_expected_fitness: Corresponding expected fitness values for the test genomes
+        
+        Raises:
+            AssertionError: If the fitness function does not return expected values
+            ValueError: If tensor_fitness_function is not implemented
+        
+        Note:
+            This method is not JIT-compiled or vectorized, as it is intended for debugging purposes only.
+        """
+        # check if the tensor_fitness_function can be jit-compiled and vectorized
+        try:
+            jax.jit(self.tensor_fitness_function)
+            jax.vmap(self.tensor_fitness_function)
+        except Exception as e:
+            print(f"JIT or vmap compilation failed: {e}")
+            return
+
+        print("*"*50)
+        print("the tensor_fitness_function can be jit-compiled and vectorized correctly.")
+        print("*"*50)
+        print("\n\n\nEvaluating edge cases:\n\n")
+
+        for genome_tensor, expected_fitness in zip(list_of_genome_edge_cases, list_of_expected_fitness):
+            try:
+                result = self.tensor_fitness_function(genome_tensor)
+                print("-"*20)
+                assert result == expected_fitness, f"Expected {expected_fitness}, but got {result}"
+                print(f"Genome {genome_tensor} evaluated correctly with fitness {result}.")
+            except Exception as e:
+                print(f"Error evaluating genome {genome_tensor}: {e}")
+        if self._tensor_fitness_fn is None:
+            raise ValueError("tensor_fitness_function must be implemented")
+        
+    def get_tensor_fitness_function(self) -> Callable:
+        """
+        Get the tensor-only fitness function.
+        
+        Returns:
+            Callable that takes a genome tensor and returns a float fitness value
+        """
+        return jax.jit(self.tensor_fitness_function)
+
+    def get_batch_fitness_function(self) -> Callable[[jnp.ndarray], jnp.ndarray]:
+        """
+        Get the batch fitness function that can evaluate multiple genomes at once.
+        
+        Returns:    
+            Callable that takes a batch of genome tensors and returns a JAX array of fitness values
             
+        Raises:
+            ValueError: If tensor_fitness_function is not implemented
+        """
+        if self._tensor_fitness_fn is None:
+            raise ValueError("tensor_fitness_function must be implemented")
+        
+        # Vectorize and JIT compile the tensor fitness function
+        vmap_fn = jax.vmap(self._tensor_fitness_fn)
+        jit_vmap_fn = jax.jit(vmap_fn)
+
+        return jit_vmap_fn
+
+    def evaluate_single(self, genome: Any) -> float:
+        """
+        Evaluate a single genome's fitness.
+
+        Args:
+            genome: Either an AbstractGenome instance or a JAX tensor
         Returns:
             Fitness value as float
-        """
-        genome_tensor = solution.genome.to_tensor()
-        return float(self.tensor_fitness_function(genome_tensor))
-    
-    def _get_batch_fitness_function(self, tensor_shape: tuple) -> Callable:
-        """
-        Get or create the JIT-compiled batch fitness function.
-        
-        Args:
-            tensor_shape: Shape of the genome tensors for compilation
-            
-        Returns:
-            JIT-compiled vectorized fitness function
-        """
-        if self._batch_fitness_fn is None or self._compiled_for_shape != tensor_shape:
-            # Create and cache the batch function
-            self._batch_fitness_fn = jax.jit(jax.vmap(self.tensor_fitness_function))
-            self._compiled_for_shape = tensor_shape
-            
-        return self._batch_fitness_fn
-    
-    def evaluate_solutions(self, solutions: List[AbstractSolution]) -> None:
-        """
-        Evaluate a list of solutions simultaneously using JAX vectorization.
-        
-        This method is optimized for batch evaluation and will JIT-compile
-        the fitness function for efficient repeated use.
-        
-        Args:
-            solutions: List of Solution objects to evaluate
-            
         Raises:
-            ValueError: If solutions list is empty
             RuntimeError: If fitness evaluation fails
         """
-        if not solutions:
-            raise ValueError("Cannot evaluate empty solutions list")
-        
+        if callable(getattr(genome, 'to_tensor', None)):
+            genome_tensor = genome.to_tensor()
+        else:
+            genome_tensor = genome
         try:
-            # Convert to tensors (Python overhead - unavoidable)
-            genome_tensors = jnp.stack([solution.genome.to_tensor() for solution in solutions])
-            
-            # Get cached or create new batch function
-            batch_fitness_fn = self._get_batch_fitness_function(genome_tensors.shape[1:])
-            
-            # Evaluate batch
-            fitness_values = batch_fitness_fn(genome_tensors)
-            
-            # Assign results back (Python overhead - unavoidable)  
-            for solution, fitness in zip(solutions, fitness_values):
-                solution.raw_fitness = float(fitness)
-                
+            return float(self.tensor_fitness_function(genome_tensor))
         except Exception as e:
-            raise RuntimeError(f"Fitness evaluation failed: {e}") from e
-    
-    def evaluate_population_stack(self, population_stack: Array) -> Array:
+            raise RuntimeError(f"Single genome fitness evaluation failed: {e}") from e
+
+    def evaluate_batch(self, genomes: List[jnp.ndarray]| List[AbstractGenome] | jnp.ndarray | AbstractPopulation, return_tensors: bool = False) -> List[float]:
         """
-        Evaluate a stacked population tensor directly.
-        
-        This method works with the Population.to_stack() output for maximum efficiency.
-        Use this when you don't need to update individual solution fitness values.
-        
+        Evaluate a batch of genomes efficiently.
+
         Args:
-            population_stack: Stacked genome tensors from Population.to_stack()
-            
+            genomes: List of AbstractGenome instances or JAX tensors
+
         Returns:
-            Array of fitness values corresponding to each genome
-            
-        Raises:
-            ValueError: If population stack is empty
-            RuntimeError: If fitness evaluation fails
+            List of fitness values as floats
         """
-        if population_stack.size == 0:
-            raise ValueError("Cannot evaluate empty population stack")
+        if len(genomes) == 0:
+            return []
         
-        try:
-            # Get cached or create new batch function
-            batch_fitness_fn = self._get_batch_fitness_function(population_stack.shape[1:])
+        population_stack = None
+        #if genomes is a jnp.ndarray, assume it's already a stack of tensors
+        if isinstance(genomes, jnp.ndarray):
+            population_stack = genomes
             
-            # Evaluate entire stack
-            fitness_values = batch_fitness_fn(population_stack)
-            
+        elif isinstance(genomes, AbstractPopulation):
+            population_stack = genomes.to_stack()
+        elif not isinstance(genomes, list):
+            raise ValueError("Genomes must be provided as a list of AbstractGenome instances or a JAX tensor stack")
+        
+        # Convert genomes to tensors if they are AbstractGenome instances
+        if callable(getattr(genomes[0], 'to_tensor', None)):
+            population_stack = jnp.stack([g.to_tensor() for g in genomes])
+        elif callable(getattr(genomes, 'to_stack', None)):
+            population_stack = genomes.to_stack()
+        elif  population_stack is None:
+            # Assume they are already tensors, try to stack them
+            try:
+                population_stack = jnp.stack(genomes)
+            except Exception as e:
+                raise ValueError(f"Genomes must be AbstractGenome instances, a Population Instance, or JAX tensors {e}") from e
+
+        fitness_values = self._batch_fitness_fn(population_stack)
+        if return_tensors:
             return fitness_values
-            
-        except Exception as e:
-            raise RuntimeError(f"Population stack fitness evaluation failed: {e}") from e
-    
-    def evaluate_population(self, population) -> None:
-        """
-        Evaluate an entire population efficiently using stack operations.
-        
-        This method leverages Population.to_stack() for optimal performance,
-        then updates individual solution fitness values.
-        
-        Args:
-            population: Population object to evaluate
-            
-        Raises:
-            ValueError: If population is empty
-            RuntimeError: If fitness evaluation fails
-        """
-        if population.size == 0:
-            raise ValueError("Cannot evaluate empty population")
-        
-        try:
-            # Use stack-based evaluation for efficiency
-            population_stack = population.to_stack()
-            fitness_values = self.evaluate_population_stack(population_stack)
-            
-            # Update individual solution fitness values
-            solutions = population.get_solutions()
-            for solution, fitness in zip(solutions, fitness_values):
-                solution.raw_fitness = float(fitness)
-                
-        except Exception as e:
-            raise RuntimeError(f"Population fitness evaluation failed: {e}") from e
-    
-    def evaluate_single_solution(self, solution: AbstractSolution) -> None:
-        """
-        Evaluate a single solution and set its fitness.
-        
-        Args:
-            solution: Solution to evaluate
-        """
-        solution.raw_fitness = self.fitness_function(solution)
-    
+        return [float(f) for f in fitness_values]
+
     def get_compatibility_info(self) -> Dict[str, Any]:
         """
         Get compatibility information for this fitness evaluator.
@@ -194,62 +189,15 @@ class AbstractFitnessEvaluator(ABC):
             'jax_compatible': True
         }
 
-
-class FitnessEvaluatorMixin:
-    """
-    Mixin class providing common fitness evaluation utilities.
-    """
-    
-    @staticmethod
-    def validate_fitness_value(fitness: float) -> bool:
+    def __call__(self, population: List[Any], return_tensors: bool = False) -> jnp.ndarray:
         """
-        Validate that a fitness value is valid (not NaN, not infinite).
+        Allow the fitness evaluator to be called directly on a population.
         
         Args:
-            fitness: Fitness value to validate
+            population: List of AbstractGenome instances or JAX tensors
+            return_tensors: If True, return JAX array of fitness values instead of list of floats
             
         Returns:
-            True if valid, False otherwise
+            List of fitness values as floats or JAX array if return_tensors is True
         """
-        return jnp.isfinite(fitness) and not jnp.isnan(fitness)
-    
-    @staticmethod
-    def clip_fitness(fitness: float, min_val: float = -1e6, max_val: float = 1e6) -> float:
-        """
-        Clip fitness values to prevent numerical issues.
-        
-        Args:
-            fitness: Original fitness value
-            min_val: Minimum allowed value
-            max_val: Maximum allowed value
-            
-        Returns:
-            Clipped fitness value
-        """
-        return float(jnp.clip(fitness, min_val, max_val))
-    
-    @staticmethod
-    def normalize_fitness_array(fitness_values: Array, method: str = 'minmax') -> Array:
-        """
-        Normalize an array of fitness values.
-        
-        Args:
-            fitness_values: Array of raw fitness values
-            method: Normalization method ('minmax', 'zscore', 'rank')
-            
-        Returns:
-            Normalized fitness values
-        """
-        if method == 'minmax':
-            min_val = jnp.min(fitness_values)
-            max_val = jnp.max(fitness_values)
-            return (fitness_values - min_val) / (max_val - min_val + 1e-10)
-        elif method == 'zscore':
-            mean_val = jnp.mean(fitness_values)
-            std_val = jnp.std(fitness_values)
-            return (fitness_values - mean_val) / (std_val + 1e-10)
-        elif method == 'rank':
-            ranks = jnp.argsort(jnp.argsort(fitness_values))
-            return ranks / (len(fitness_values) - 1)
-        else:
-            raise ValueError(f"Unknown normalization method: {method}")
+        return self.evaluate_batch(population.to_stack(), return_tensors=return_tensors)
