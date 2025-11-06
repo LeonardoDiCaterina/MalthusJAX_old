@@ -10,26 +10,26 @@ from .selection.base import AbstractSelectionOperator
 from .crossover.base import AbstractCrossover
 from .mutation.base import AbstractMutation
 
-# Import specific implementations
-from .selection.roulette import RouletteSelection
-from .selection.tournament import TournamentSelection
-from .crossover.binary import CycleCrossover, UniformCrossover
-from .mutation.binary import BitFlipMutation, ScrambleMutation
+from .selection import TournamentSelection, RouletteSelection
+from .crossover import SinglePointCrossover, UniformCrossover, AverageCrossover
+from .mutation import BitFlipMutation, CategoricalFlipMutation, BallMutation, SwapMutation, ScrambleMutation
+
 
 __all__ = [
-    # Base classes
     "AbstractGeneticOperator",
     "AbstractSelectionOperator",
     "AbstractCrossover",
     "AbstractMutation",
-    # Selection operators
-    "RouletteSelection",
     "TournamentSelection",
-    # Specific implementations
+    "RouletteSelection",
+    "SinglePointCrossover",
     "UniformCrossover",
-    "CycleCrossover",   
+    "AverageCrossover",
     "BitFlipMutation",
-    "ScrambleMutation", 
+    "CategoricalFlipMutation",
+    "BallMutation",
+    "SwapMutation",
+    "ScrambleMutation",
 ]
 
 __version__ = "0.1.0"

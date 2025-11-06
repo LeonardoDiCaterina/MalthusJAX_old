@@ -9,10 +9,9 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Callable
 import jax # type: ignore
 import jax.numpy as jnp # type: ignore
-from jax import Array
-from malthusjax.core.population.base import AbstractPopulation  # type: ignore
+from jax import Array # type: ignore
 
-from ..base import JAXTensorizable, Compatibility
+from ..base import JAXTensorizable
 from ..genome.base import AbstractGenome
 
 class AbstractFitnessEvaluator(ABC):
@@ -28,22 +27,6 @@ class AbstractFitnessEvaluator(ABC):
         self._tensor_fitness_fn: Optional[Callable] = self.get_tensor_fitness_function()
         self._batch_fitness_fn: Optional[Callable] = self.get_batch_fitness_function()
         
-    
-    @abstractmethod
-    def tensor_fitness_function(self, genome_tensor: Array) -> float:
-        """
-        Abstract tensor-only version of fitness function for vectorized operations.
-        
-        This method must be implemented by subclasses and should be JAX-compatible
-        (no Python control flow, pure functions only).
-        
-        Args:
-            genome_tensor: JAX array representing a single genome
-            
-        Returns:
-            Fitness value as a scalar float
-        """
-        pass
     
     def debug_tensor_fitness_function(self, list_of_genome_edge_cases: List[Array], list_of_expected_fitness: List[float]) -> None:
         """
@@ -64,29 +47,31 @@ class AbstractFitnessEvaluator(ABC):
             This method is not JIT-compiled or vectorized, as it is intended for debugging purposes only.
         """
         # check if the tensor_fitness_function can be jit-compiled and vectorized
+        
         try:
-            jax.jit(self.tensor_fitness_function)
-            jax.vmap(self.tensor_fitness_function)
+            jax.jit(self._tensor_fitness_fn)
+            jax.jit(self._batch_fitness_fn)
+            print("the tensor_fitness_function can be jit-compiled and vectorized correctly.")
+
         except Exception as e:
             print(f"JIT or vmap compilation failed: {e}")
             return
-
-        print("*"*50)
-        print("the tensor_fitness_function can be jit-compiled and vectorized correctly.")
+        
         print("*"*50)
         print("\n\n\nEvaluating edge cases:\n\n")
 
         for genome_tensor, expected_fitness in zip(list_of_genome_edge_cases, list_of_expected_fitness):
             try:
-                result = self.tensor_fitness_function(genome_tensor)
+                result = self._tensor_fitness_fn(genome_tensor)
                 print("-"*20)
-                assert result == expected_fitness, f"Expected {expected_fitness}, but got {result}"
+                assert result == expected_fitness, f"Expected {expected_fitness}, but got {result} on genome {genome_tensor}"
                 print(f"Genome {genome_tensor} evaluated correctly with fitness {result}.")
             except Exception as e:
                 print(f"Error evaluating genome {genome_tensor}: {e}")
         if self._tensor_fitness_fn is None:
             raise ValueError("tensor_fitness_function must be implemented")
-        
+    
+    @abstractmethod
     def get_tensor_fitness_function(self) -> Callable:
         """
         Get the tensor-only fitness function.
@@ -94,7 +79,7 @@ class AbstractFitnessEvaluator(ABC):
         Returns:
             Callable that takes a genome tensor and returns a float fitness value
         """
-        return jax.jit(self.tensor_fitness_function)
+        pass
 
     def get_batch_fitness_function(self) -> Callable[[jnp.ndarray], jnp.ndarray]:
         """
@@ -109,11 +94,10 @@ class AbstractFitnessEvaluator(ABC):
         if self._tensor_fitness_fn is None:
             raise ValueError("tensor_fitness_function must be implemented")
         
-        # Vectorize and JIT compile the tensor fitness function
+        # Vectorize the tensor fitness function
         vmap_fn = jax.vmap(self._tensor_fitness_fn)
-        jit_vmap_fn = jax.jit(vmap_fn)
 
-        return jit_vmap_fn
+        return vmap_fn
 
     def evaluate_single(self, genome: Any) -> float:
         """
@@ -131,11 +115,11 @@ class AbstractFitnessEvaluator(ABC):
         else:
             genome_tensor = genome
         try:
-            return float(self.tensor_fitness_function(genome_tensor))
+            return float(self._tensor_fitness_fn(genome_tensor))
         except Exception as e:
             raise RuntimeError(f"Single genome fitness evaluation failed: {e}") from e
 
-    def evaluate_batch(self, genomes: List[jnp.ndarray]| List[AbstractGenome] | jnp.ndarray | AbstractPopulation, return_tensors: bool = False) -> List[float]:
+    def evaluate_batch(self, genomes: List[jnp.ndarray]| List[AbstractGenome] | jnp.ndarray, return_tensors: bool = False) -> List[float]:
         """
         Evaluate a batch of genomes efficiently.
 
@@ -153,7 +137,7 @@ class AbstractFitnessEvaluator(ABC):
         if isinstance(genomes, jnp.ndarray):
             population_stack = genomes
             
-        elif isinstance(genomes, AbstractPopulation):
+        elif isinstance(genomes):
             population_stack = genomes.to_stack()
         elif not isinstance(genomes, list):
             raise ValueError("Genomes must be provided as a list of AbstractGenome instances or a JAX tensor stack")

@@ -12,4 +12,4 @@ from . import base
 from . import genome  
 from . import fitness
 
-__all__ = ["base", "genome", "fitness", "population"] 
+__all__ = ["base", "genome", "fitness"] 

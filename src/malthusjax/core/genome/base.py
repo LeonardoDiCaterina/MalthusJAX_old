@@ -7,12 +7,38 @@ for efficient batch operations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional, Dict
+from typing import Any, Callable, Optional, Dict, Tuple
 import jax.numpy as jnp  # type: ignore
 from jax import Array  # type: ignore
 import jax  # type: ignore
-from ..base import JAXTensorizable, Compatibility, ProblemTypes, SerializationContext
+from ..base import JAXTensorizable
 
+import functools
+
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class AbstractGenomeConfig(ABC):
+    """Base config class for all genome types."""
+    
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> 'AbstractGenomeConfig':
+        """Create a config instance from a dictionary."""
+        pass
+    
+    @abstractmethod
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the config instance to a dictionary."""
+        pass
+
+# Register as PyTree with no children (all static)
+jax.tree_util.register_pytree_node(
+    AbstractGenomeConfig,
+    lambda obj: ([], obj.__dict__),  # no children, all aux
+    lambda aux, cls: cls(**aux)  # reconstruct from aux
+)
+                                                        
 class AbstractGenome(JAXTensorizable, ABC):
     """
     Abstract base class for all genome representations.
@@ -28,30 +54,26 @@ class AbstractGenome(JAXTensorizable, ABC):
     def __init__(self, 
                  random_init: bool = False, 
                  random_key: Optional[int] = None, 
-                 compatibility: Optional[Compatibility] = None,
                  **kwargs: Any):
         """
-        Initialize genome with compatibility information.
+        Initialize genome base class.
 
         Args:
             random_init: Whether to randomly initialize the genome
             random_key: Random seed for initialization
-            compatibility: Compatibility object defining problem constraints
             **kwargs: Additional genome-specific metadata
         """
-        # Set default compatibility if none provided
-        if compatibility is None:
-            compatibility = Compatibility(problem_type=ProblemTypes.DISCRETE_OPTIMIZATION)
         
-        self._compatibility = compatibility
         self._metadata: Dict[str, Any] = kwargs
         self._is_valid: Optional[bool] = None
-        self.random_key = random_key
-        
+        # init the JAXTensorizable
+        JAXTensorizable.__init__(self, random_key=random_key)
+        self._genome_config = self.get_config()
+
         if random_init:
             self._random_init()
-            if not self.is_valid:
-                raise ValueError(f"Random initialization produced invalid genome: {self.to_tensor()}")
+            #if not self.is_valid:
+            #    raise ValueError(f"Random initialization produced invalid genome: {self.to_tensor()}")
         self._fitness: Optional[float] = None  # Fitness value, to be set externally
 
     @property
@@ -60,7 +82,7 @@ class AbstractGenome(JAXTensorizable, ABC):
         return self.to_tensor().size
 
     @property
-    def shape(self) -> tuple:
+    def shape(self) -> Tuple:
         """Get the shape of the genome tensor."""
         return self.to_tensor().shape
 
@@ -73,16 +95,6 @@ class AbstractGenome(JAXTensorizable, ABC):
     def metadata(self, value: Dict[str, Any]) -> None:
         """Set genome metadata."""
         self._metadata = value
-
-    @property
-    def compatibility(self) -> Compatibility:
-        """Get compatibility information."""
-        return self._compatibility
-
-    @compatibility.setter
-    def compatibility(self, value: Compatibility) -> None:
-        """Set compatibility information."""
-        self._compatibility = value
 
     @property
     def is_valid(self) -> bool:
@@ -103,76 +115,144 @@ class AbstractGenome(JAXTensorizable, ABC):
     def invalidate(self) -> None:
         """Invalidate cached validation result."""
         self._is_valid = None
-
-    # === Abstract methods that subclasses must implement ===
+        
+    @property
+    def genome_config(self) -> AbstractGenomeConfig:
+        """Get the genome configuration."""
+        return self._genome_config
     
-    @classmethod
-    @abstractmethod
-    def get_random_initialization_jit(cls, genome_init_params: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
-        """Get JIT-compiled function for random genome initialization that will receive a random key and return a tensor."""
-        pass
+    @genome_config.setter
+    def genome_config(self, value: Any) -> None:
+        """Set the genome configuration."""
+        if isinstance(value, Dict):
+            value = self.get_config().from_dict(value)
+        elif not isinstance(value, AbstractGenomeConfig):
+            raise ValueError("genome_config must be an AbstractGenomeConfig instance or a dict")
+        self._genome_config = value
 
-    @abstractmethod
-    def _random_init(self) -> None:
-        """Initialize genome with random values."""
-        pass
-
-    @abstractmethod
-    def _validate(self) -> bool:
-        """Validate the genome's structure and constraints."""
-        pass
-
+    # === JAX JIT Compatibility abstractions ===
+    
     @abstractmethod
     def to_tensor(self) -> Array:
         """Convert the genome to a JAX tensor."""
         pass
-    # === JAX JIT Compatibility abstractions ===
+    
+    @abstractmethod
+    def get_config(self) -> AbstractGenomeConfig:
+        """Get the configuration object for this genome."""
+        pass
+        
+    @classmethod
+    @abstractmethod
+    def get_random_initialization_compilable_from_config(cls, config: AbstractGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
+        """Get JIT-compilable function for random genome initialization that will receive a random key and return a tensor."""
+        pass
+    
+    def get_random_initialization_compilable(self) -> Callable[[Optional[int]], jnp.ndarray]:
+        """Get JIT-compilable function for random genome initialization that will receive a random key and return a tensor."""
+        return self.get_random_initialization_compilable_from_config(self.genome_config)
+
+    def _random_init(self) -> None:
+        """Initialize genome with random values."""
+        init_fn = self.get_random_initialization_compilable_from_config(self.genome_config)
+        random_key = self.random_key # This uses the property which splits the key
+        if random_key is None:
+            raise ValueError("Random key is not set for random_init")
+        tensor = init_fn(random_key)
+        self.update_from_tensor(tensor, validate=True)
+
     
     @classmethod
     @abstractmethod
-    def get_distance_jit(self) -> Callable[[jax.Array, jax.Array], float]:
-        """Get JIT-compiled function to compute distance between two genomes."""
+    def get_validation_compilable_from_config(cls, config: AbstractGenomeConfig) -> Callable[[jax.Array], bool]:
+        """Get JIT-compilable function that returns a boolean indicating if genome is valid."""
         pass
+    
+    def get_validation_compilable(self) -> Callable[[jax.Array], bool]:
+        """Get JIT-compilable function that returns a boolean indicating if genome is valid."""
+        return self.get_validation_compilable_from_config(self.genome_config)
+
+    @abstractmethod
+    def _validate(self) -> bool:
+        """Validate the genome's structure and constraints."""
+        validation_fn = self.get_validation_compilable()
+        return bool(validation_fn(self.to_tensor()))
     
     @classmethod
     @abstractmethod
-    def get_autocorrection_jit(cls, genome_init_params: Dict[str, Any]) -> Callable[[jax.Array], jax.Array]:
-        """Get JIT-compiled function that turns invalid genomes into valid ones."""
+    def get_distance_compilable_from_config(self, config: AbstractGenomeConfig) -> Callable[[jax.Array, jax.Array], float]:
+        """Get JIT-compilable function to compute distance between two genomes."""
         pass
+    
+    def get_distance_compilable(self) -> Callable[[jax.Array, jax.Array], float]:
+        """Get JIT-compilable function to compute distance between two genomes."""
+        return self.get_distance_compilable_from_config(self.genome_config)
+    
+    def _distance(self, other: 'AbstractGenome') -> float:
+        """Compute distance to another genome."""
+        if not isinstance(other, type(self)):
+            raise TypeError(f"Distance can only be computed between type {type(self)} instances, got type {type(other)}")
+        distance_fn, _ = self.get_distance_compilable()
+        return float(distance_fn(self.to_tensor(), other.to_tensor()))
+
+    
+    @classmethod
+    @abstractmethod
+    def get_autocorrection_compilable_from_config(cls, config: AbstractGenomeConfig) -> Callable[[jax.Array], jax.Array]:
+        """Get JIT-compilable function that turns invalid genomes into valid ones."""
+        pass
+    
+    def get_autocorrection_compilable(self) -> Callable[[jax.Array], jax.Array]:
+        """Get JIT-compilable function that turns invalid genomes into valid ones."""
+        return self.get_autocorrection_compilable_from_config(self.genome_config)
+    
+    def _autocorrect(self) -> None:
+        """Autocorrect the genome to make it valid."""
+        correction_fn, _ = self.get_autocorrection_compilable()
+        tensor = correction_fn(self.to_tensor())
+        self.update_from_tensor(tensor, validate=True)
 
     @classmethod
     @abstractmethod
-    def from_tensor(cls, 
-                   tensor: Array,
-                   genome_init_params: Optional[Dict[str, Any]] = None,
-                   **kwargs: Any) -> 'AbstractGenome':
-        """Create a genome from a JAX tensor with standardized signature."""
+    def get_genome_config_class(cls) -> Any:
+        """Get the genome config class associated with this genome type."""
         pass
+    
+    
+    
+    @classmethod
+    def from_tensor_from_config(cls, 
+                tensor: Array,
+                config: AbstractGenomeConfig,
+                **kwargs: Any) -> 'AbstractGenome':
+        """Create a AbstractGenome from a JAX tensor."""
+        # Extract parameters from context if available
+        if tensor.shape != config.array_shape:
+            raise ValueError(f"Tensor shape {tensor.shape} doesn't match config array_shape {config.array_shape}")
+        
+        # Create instance without random initialization
+        new_genome = cls(
+            **config.to_dict(),  # Unpack the genome initialization parameters 
+            random_init=False,
+            **kwargs
+        )
+        
+        new_genome.genome = tensor
+        # Set the genome tensor
 
-    @abstractmethod
-    def get_serialization_context(self) -> SerializationContext:
-        """Get context needed to reconstruct this genome."""
-        pass
-
-    @abstractmethod
-    def distance(self, other: 'AbstractGenome') -> float:
-        """Calculate the distance between two genomes."""
-        pass
+        # Validate the result
+        if not new_genome.is_valid:
+            raise ValueError(f"Genome created from tensor is not valid: {new_genome.to_tensor()}")
+            
+        return new_genome
+        
+    def from_tensor(self, tensor: Array, **kwargs: Any) -> 'AbstractGenome':
+        """Create a AbstractGenome from a JAX tensor."""
+        return self.from_tensor_from_config(tensor, self.genome_config, **kwargs)
 
     @abstractmethod
     def semantic_key(self) -> str:
         """Generate a unique key for the genome."""
-        pass
-
-    @abstractmethod
-    def tree_flatten(self):
-        """JAX tree flattening support."""
-        pass
-
-    @classmethod
-    @abstractmethod
-    def tree_unflatten(cls, aux_data, children):
-        """JAX tree unflattening support."""
         pass
 
     @abstractmethod
@@ -202,9 +282,8 @@ class AbstractGenome(JAXTensorizable, ABC):
             tensor: New genome data as a tensor
             validate: Whether to validate after update
         """
-        current_shape = self.to_tensor().shape
-        if tensor.shape != current_shape:
-            raise ValueError(f"Tensor shape {tensor.shape} incompatible with genome shape {current_shape}")
+        if tensor.shape != self.array_shape:
+            raise ValueError(f"Tensor shape {tensor.shape} incompatible with genome shape {self.array_shape}")
         
         # This is a placeholder - subclasses should override with proper implementation
         self.invalidate()  # Invalidate cached validation result
@@ -222,8 +301,6 @@ class AbstractGenome(JAXTensorizable, ABC):
         """Check if two genomes are equal."""
         if not isinstance(other, AbstractGenome):
             return False
-        return (self.compatibility == other.compatibility and
-                self.semantic_key() == other.semantic_key())
 
     def __ne__(self, other: object) -> bool:
         """Check if two genomes are not equal."""
@@ -233,7 +310,7 @@ class AbstractGenome(JAXTensorizable, ABC):
         """Calculate distance between two genomes."""
         if not isinstance(other, AbstractGenome):
             raise TypeError(f"Unsupported operand type(s) for -: '{type(self).__name__}' and '{type(other).__name__}'")
-        return self.distance(other)
+        return self._distance(other)
 
     def __hash__(self) -> int:
         """Hash based on semantic key."""
@@ -242,7 +319,7 @@ class AbstractGenome(JAXTensorizable, ABC):
     def __str__(self) -> str:
         """Safe string representation."""
         try:
-            return f"{self.__class__.__name__}(size={self.size}, valid={self.is_valid})"
+            return f"{self.genome}(array_shape={self.array_shape}, valid={self.is_valid})"  
         except Exception:
             return f"{self.__class__.__name__}(invalid_state)"
 
@@ -251,7 +328,6 @@ class AbstractGenome(JAXTensorizable, ABC):
         try:
             return (f"{self.__class__.__name__}("
                    f"size={self.size}, "
-                   f"compatibility={self.compatibility}, "
                    f"valid={self.is_valid}, "
                    f"semantic_key='{self.semantic_key()[:20]}...')")
         except Exception:

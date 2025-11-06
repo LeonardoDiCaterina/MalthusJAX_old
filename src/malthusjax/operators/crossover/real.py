@@ -1,161 +1,122 @@
 from malthusjax.operators.crossover.base import AbstractCrossover
-from functools import partial # this is needed for JIT compilation as it allows us to pass static arguments
+from functools import partial
 from typing import Callable
-
 import jax # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
 
+# --- Uniform Crossover ---
 
 class UniformCrossover(AbstractCrossover):
-    """Uniform crossover operator that randomly selects genes from two parents.
-    
-    This operator uses a uniform mask to determine which genes to take from each parent.
     """
-    
-    def _create_crossover_function(self) -> Callable:
-        """Create the core crossover function for uniform crossover."""
-        crossover_rate = self.crossover_rate  # Capture as closure
-        
-        @partial(jax.jit, static_argnames=())
-        def crossover(genome_data1: jax.Array, genome_data2: jax.Array, random_key: jax.Array) -> jax.Array:  
-            """Perform uniform crossover on a single genome."""
-            # Generate a random mask based on the crossover rate
-            mask = jar.bernoulli(random_key, p=self.crossover_rate, shape=genome_data1.shape)
-            # Combine the two genomes using the mask
-            crossed_genome = jnp.where(mask, genome_data1, genome_data2)
-            return crossed_genome
-
-        
-        return crossover
-    
-class CycleCrossover(AbstractCrossover):
-    """Cycle crossover operator that creates offspring by following cycles in the parent genomes.
-    
-    This operator is more complex and can be optimized for JIT compilation.
+    Uniform Crossover. `n_outputs` can be 1 or 2.
+    - If `n_outputs=1`: Offspring has genes from P1 or P2 based on `crossover_rate`.
+    - If `n_outputs=2`: Offspring1 is (P1 where mask, P2 where ~mask)
+                        Offspring2 is (P2 where mask, P1 where ~mask)
     """
-    def _create_crossover_function(self) -> Callable:
-        """Create the core crossover function for cycle crossover."""
-        crossover_rate = self.crossover_rate  # Capture as closure variable
-        
-        def crossover(genome_data1: jax.Array, genome_data2: jax.Array, random_key: jax.Array) -> jax.Array:  # Only 2 args
-            """Perform cycle crossover on a single genome.
-            
-            Args:
-                genome_data1: Input genome array 
-                genome_data2: Second genome array for crossover
-                random_key: JAX random key for stochastic operations 
-                
-            Returns:
-                Modified genome after crossover
-            """
-            start_pos = jar.randint(random_key, (), 0, genome_data1.shape[0])
-            def body_fun(carry, _):
-                idx, offspring = carry
-                next_idx = jnp.where(genome_data1 == genome_data2[idx], size=1)[0][0]
-                new_offspring = offspring.at[next_idx].set(genome_data2[next_idx])
-                return (next_idx, new_offspring), None
-            
-            
-            initial_offspring = genome_data1.at[start_pos].set(genome_data2[start_pos])
-            (_, final_offspring), _ = jax.lax.scan(
-                lambda c, x: body_fun(c, x),
-                (start_pos, initial_offspring),
-                jnp.arange(genome_data1.shape[0]),
-            )
+    def get_compiled_function(self) -> Callable:
+        return partial(
+            _uniform_crossover,
+            crossover_rate=self.crossover_rate,
+            n_outputs=self.n_outputs
+        )
 
-            return final_offspring
+@partial(jax.jit, static_argnames=["n_outputs"])
+def _uniform_crossover(
+    key: jax.Array,
+    parent1: jax.Array,
+    parent2: jax.Array,
+    crossover_rate: float,
+    n_outputs: int
+) -> jax.Array:
+    """Pure JAX uniform crossover. Handles 1 or 2 outputs."""
+    mask = jar.bernoulli(key, p=crossover_rate, shape=parent1.shape)
+    offspring1 = jnp.where(mask, parent1, parent2)
+    
+    if n_outputs == 1:
+        return offspring1.reshape((1,) + parent1.shape)
+    
+    # n_outputs == 2
+    offspring2 = jnp.where(mask, parent2, parent1)
+    return jnp.stack([offspring1, offspring2])
 
-        return crossover
-    
-    
+# --- Single Point Crossover ---
 
 class SinglePointCrossover(AbstractCrossover):
-    """Single point crossover operator that randomly selects a crossover point.
-    
-    This operator uses a single crossover point to exchange genetic material between two parents.
     """
-    
-    def _create_crossover_function(self) -> Callable:
-        """Create the core crossover function for single point crossover."""
-        crossover_rate = self.crossover_rate  # Capture as closure
-        @partial(jax.jit, static_argnames=())
-        def crossover(genome_data1: jax.Array, genome_data2: jax.Array, random_key: jax.Array) -> jax.Array:
-            """Perform single point crossover on two genomes."""
-            # Select a random crossover point
-            crossover_point = jar.randint(random_key, (), 0, genome_data1.shape[0])
-            # Create a mask for the crossover point
-            mask = jnp.arange(genome_data1.shape[0]) < crossover_point
-            # Combine the two genomes using the mask
-            crossed_genome = jnp.where(mask, genome_data1, genome_data2)
-
-            return crossed_genome
-
-        return crossover
-
-
-
-class PillarCrossover(AbstractCrossover):
-    """Pillar point crossover operator keeps the genes in common between two parents and shuffles the rest.
-    
+    Single-point crossover. `n_outputs` can be 1 or 2.
+    - If `n_outputs=1`: Offspring is [P1_head, P2_tail]
+    - If `n_outputs=2`: Offspring1 is [P1_head, P2_tail]
+                        Offspring2 is [P2_head, P1_tail]
     """
-    
-    def _create_crossover_function(self) -> Callable:
-        """Create the core crossover function for single point crossover."""
-        crossover_rate = self.crossover_rate  # Capture as closure
-        @partial(jax.jit, static_argnames=())
-        def crossover(genome_data1: jax.Array, genome_data2: jax.Array, random_key: jax.Array) -> jax.Array:
-            """Perform pillar point crossover on two genomes."""
-            length = genome_data1.shape[0]
-            indices = jnp.arange(length)
-            
-            # Create mask where genomes are equal
-            mask = genome_data1 == genome_data2
-            
-            # Create permuted indices for shuffling
-            perm_indices = jax.random.permutation(random_key, indices)
-            
-            # Create the output array starting with genome_data1
-            output = genome_data1
-            
-            # Function to update a single index
-            def update_fn(i, val):
-                should_update = ~mask[i]
-                # Find the corresponding permuted value
-                perm_idx = perm_indices[i]
-                new_val = jnp.where(should_update, genome_data1[perm_idx], val)
-                return new_val
-            
-            # Apply updates using scan to avoid dynamic indexing
-            output = jax.lax.fori_loop(0, length, 
-                                    lambda i, acc: acc.at[i].set(update_fn(i, acc[i])), 
-                                    output)
-            
-            return output
+    def get_compiled_function(self) -> Callable:
+        # Crossover rate is ignored for single point, but part of base class
+        return partial(
+            _single_point_crossover,
+            n_outputs=self.n_outputs
+        )
 
-        return crossover
+@partial(jax.jit, static_argnames=["n_outputs"])
+def _single_point_crossover(
+    key: jax.Array,
+    parent1: jax.Array,
+    parent2: jax.Array,
+    n_outputs: int
+) -> jax.Array:
+    """Pure JAX single-point crossover."""
+    crossover_point = jar.randint(key, shape=(), minval=0, maxval=parent1.shape[0])
+    mask = jnp.arange(parent1.shape[0]) < crossover_point
     
+    offspring1 = jnp.where(mask, parent1, parent2)
     
+    if n_outputs == 1:
+        return offspring1.reshape((1,) + parent1.shape)
+    
+    # n_outputs == 2
+    offspring2 = jnp.where(mask, parent2, parent1)
+    return jnp.stack([offspring1, offspring2])
+
+# --- Average Crossover ---
+
 class AverageCrossover(AbstractCrossover):
-    """Average crossover operator that averages the genes of two parents.
-    
-    This operator is suitable for real-valued genomes.
     """
-    def __init__(self, crossover_rate = 0.01):
-        if crossover_rate < 0.0 or crossover_rate > 1.0:
-            raise ValueError(f"Crossover rate must be either 0.0 or 1.0 for AverageCrossover.\n Got {crossover_rate}")
-        super().__init__(crossover_rate)
-    
-    def _create_crossover_function(self) -> Callable:
-        """Create the core crossover function for average crossover."""
-        if self.crossover_rate > 1.0 or self.crossover_rate < 0.0:
-            raise ValueError(f"Crossover rate must be either 0.0 or 1.0 for AverageCrossover.\n Got {self.crossover_rate}")
-        crossover_rate = self.crossover_rate  # Capture as closure
-        @partial(jax.jit, static_argnames=())
-        def crossover(genome_data1: jax.Array, genome_data2: jax.Array, random_key: jax.Array) -> jax.Array:
-            """Perform average crossover on two genomes."""
-            # Average the two genomes
-            crossed_genome = (crossover_rate* genome_data1 + (1 - crossover_rate) * genome_data2)
-            return crossed_genome
+    Average (Blend) Crossover (BLX-alpha). `n_outputs` can be 1 or 2.
+    The `crossover_rate` is used as the 'alpha' blending factor.
+    - Offspring1 = alpha*P1 + (1-alpha)*P2
+    - Offspring2 = alpha*P2 + (1-alpha)*P1
+    """
+    def __init__(self, blend_rate: float, n_outputs: int = 2) -> None:
+        """
+        Args:
+            blend_rate: The 'alpha' for blending (0.0 to 1.0).
+                        0.5 is a simple average.
+            n_outputs: Number of offspring (1 or 2).
+        """
+        # Pass blend_rate as the crossover_rate to the base class
+        super().__init__(crossover_rate=blend_rate, n_outputs=n_outputs)
 
-        return crossover
+    def get_compiled_function(self) -> Callable:
+        return partial(
+            _average_crossover,
+            blend_rate=self.crossover_rate, # Use the rate as the blend_rate
+            n_outputs=self.n_outputs
+        )
+
+@partial(jax.jit, static_argnames=["n_outputs"])
+def _average_crossover(
+    key: jax.Array, # Key is unused, but part of the standard signature
+    parent1: jax.Array,
+    parent2: jax.Array,
+    blend_rate: float,
+    n_outputs: int
+) -> jax.Array:
+    """Pure JAX average (blend) crossover."""
+    
+    offspring1 = (blend_rate * parent1) + ((1.0 - blend_rate) * parent2)
+    
+    if n_outputs == 1:
+        return offspring1.reshape((1,) + parent1.shape)
+
+    # n_outputs == 2
+    offspring2 = (blend_rate * parent2) + ((1.0 - blend_rate) * parent1)
+    return jnp.stack([offspring1, offspring2])

@@ -5,6 +5,8 @@ This module provides a simple binary string genome representation suitable for
 binary optimization problems and as a reference implementation.
 """
 
+from dataclasses import dataclass
+import functools
 from typing import Any, Optional, Dict, Tuple, List, Callable
 
 import jax.numpy as jnp  # type: ignore
@@ -13,8 +15,26 @@ from jax import random as jar  # type: ignore
 import jax  # type: ignore
 import hashlib
 
-from .base import AbstractGenome
-from ..base import Compatibility, ProblemTypes, SerializationContext
+from .base import AbstractGenome, AbstractGenomeConfig
+
+@dataclass(frozen=True)
+class BinaryGenomeConfig(AbstractGenomeConfig):
+    array_shape: Tuple
+    p: float
+    
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> 'BinaryGenomeConfig':
+        return cls(**config_dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {'array_shape': self.array_shape, 'p': self.p}
+
+# Register each concrete config as PyTree
+jax.tree_util.register_pytree_node(
+    BinaryGenomeConfig,
+    lambda obj: ([], obj.__dict__),
+    lambda aux, _: BinaryGenomeConfig(**aux)
+)
 
 
 class BinaryGenome(AbstractGenome):
@@ -25,57 +45,46 @@ class BinaryGenome(AbstractGenome):
     """
 
     def __init__(self,
-                 array_size: int,
+                 array_shape:Tuple[int, ...],
                  p: float,
                  random_init: bool = False,
                  random_key: Optional[int] = None,
-                 compatibility: Optional[Compatibility] = None,
                  **kwargs: Any):
         """
         Initialize binary genome.
         
         Args:
-            array_size: Length of the binary array
+            array_shape: array_shape of the binary array
             p: Probability of 1s during random initialization
             random_init: Whether to randomly initialize
             random_key: Random seed
-            compatibility: Compatibility constraints
             **kwargs: Additional metadata
         """
-        self.array_size = array_size
+        self.array_shape = array_shape
         assert 0 <= p <= 1, "p must be between 0 and 1"
         self.p = p
-        
-        # Handle random key conversion
-        if random_key is None:
-            self.jax_key = jar.PRNGKey(0)
-        elif isinstance(random_key, int):
-            self.jax_key = jar.PRNGKey(random_key)
-        else:
-            self.jax_key = random_key
-            
-        # Set default compatibility for binary problems
-        if compatibility is None:
-            compatibility = Compatibility(problem_type=ProblemTypes.DISCRETE_OPTIMIZATION)
+
             
         # Store initialization parameters for serialization
         self._init_params = {
-            'array_size': array_size,
+            'array_shape': array_shape,
             'p': p
         }
-        
+        self.genome_config = BinaryGenomeConfig(array_shape=array_shape, p=p)
         super().__init__(
             random_init=random_init, 
             random_key=random_key, 
-            compatibility=compatibility,
             **kwargs
         )
 
-    def _random_init(self) -> None:
+        '''def _random_init(self) -> None:
         """Randomly initialize the genome as a binary array."""
-        self.jax_key, subkey = jar.split(self.jax_key)
-        self.genome = jar.bernoulli(subkey, p=self.p, shape=(self.array_size,))
-
+        # --- FIX: Use self.random_key property ---
+        subkey = self.random_key
+        if subkey is None:
+            raise ValueError("Random key is not set for random_init")
+        self.genome = jar.bernoulli(subkey, p=self.p, shape=self.array_shape).astype(jnp.bool_)
+        '''
     def _validate(self) -> bool:
         """Validate that genome contains only 0s and 1s."""
         if not hasattr(self, 'genome'):
@@ -83,8 +92,8 @@ class BinaryGenome(AbstractGenome):
             return False
             
         # Check shape
-        if self.genome.shape != (self.array_size,):
-            print(f"{self.genome} = {self.array_size,}")
+        if self.genome.shape != self.array_shape:
+            print(f"{self.genome} = {self.array_shape}")
             return False
             
         # Check that dtype is integer or boolean
@@ -96,80 +105,96 @@ class BinaryGenome(AbstractGenome):
         return self._is_valid
     
     # === JAX JIT Compatibility ===
+    
+    
     @classmethod
-    def get_random_initialization_jit(cls, genome_init_params: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
-        """Get JIT-compiled function for random genome initialization that will receive a random key and return a tensor."""
-        array_size = genome_init_params.get('array_size')
-        p = genome_init_params.get('p')
-        def init_fn(random_key: Optional[int]) -> jnp.ndarray:
-            return jar.bernoulli(random_key, p=p, shape=(array_size,))
-        return jax.jit(init_fn)
+    def get_genome_config_class(cls) -> Any:
+        """Get the genome config class associated with this genome type."""
+        return BinaryGenomeConfig
+    
+    
+    def get_config(self):
+        """Get the genome configuration."""
+        return self.genome_config
+    
+    
+    @classmethod
+    def get_random_initialization_compilable_from_config(cls, config: BinaryGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
+        """Get JIT-compilable function for random genome initialization that will receive a random key and return a tensor."""
+        
+        def init_fn(random_key:jnp.ndarray, array_shape: Tuple, p: float) -> jnp.ndarray:
+            genome = jar.bernoulli(random_key, p=p, shape=array_shape).astype(jnp.bool_)
+            return genome
+        
+        print(f"Compiling random initialization function with array_shape={config.array_shape}, p={config.p}")
+        return functools.partial(init_fn, array_shape=config.array_shape, p=config.p)
+    
+    
+    @classmethod
+    def get_random_initialization_compilable_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
+        """Get JIT-compilable function for random genome initialization from config dict."""
+        config = BinaryGenomeConfig.from_dict(config_dict)
+        return cls.get_random_initialization_compilable_from_config(config)
+    
 
     @classmethod
-    def get_distance_jit(cls) -> Callable[[jax.Array, jax.Array], int]:
-        """Get JIT-compiled distance function between two solutions."""
-        def distance_fn(sol1: jax.Array, sol2: jax.Array) -> int:
-            # Cast to int32 to allow subtraction
-            return jnp.sum(jnp.logical_xor(sol1, sol2))
-        return jax.jit(distance_fn)
-        # Note: jnp.bool_ arrays cannot be directly subtracted, but you can cast them to int types.
-        # For example, (a.astype(jnp.int32) - b.astype(jnp.int32)) works.
-        # Direct subtraction of jnp.bool_ arrays will raise a TypeError.
-        # Alternatively, you can use XOR (jnp.logical_xor(a, b)) to compute bitwise differences for Hamming distance.
-    @classmethod
-    def get_autocorrection_jit(cls, genome_init_params: Dict[str, Any]) -> Callable[[jax.Array], jax.Array]:
-        """Get JIT-compiled correction function for the solution."""
-        array_size = genome_init_params.get('array_size')
+    def get_autocorrection_compilable_from_config(cls, config:BinaryGenomeConfig = None) -> Callable[[jax.Array], jax.Array]:
+        """Get JIT-compilable correction function for the solution."""
         def correction_fn(sol: jax.Array) -> jax.Array:
-            # clip to 0/1 but only the first array_size elements
-            return jnp.clip(sol[:array_size], 0, 1)
+            return jnp.clip(sol, 0, 1)
 
-        return jax.jit(correction_fn)
+        return correction_fn
+    
+    @classmethod
+    def get_initialization_compilable_from_dict(cls, config: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
+        """Get JIT-compilable function for genome initialization from config dict."""
+        config_obj = BinaryGenomeConfig.from_dict(config)
+        return cls.get_random_initialization_compilable_from_config(config_obj)
+    
 
+    @classmethod
+    def get_validation_compilable_from_config(self, config:BinaryGenomeConfig = None) -> Callable[[jax.Array], bool]:
+        """Get JIT-compilable validation function."""
+        def validation_fn(sol: jax.Array) -> jax.Array:
+            # Return boolean array indicating validity
+            array = jnp.logical_or(sol == 0, sol == 1)
+            return jnp.all(array)
+        
+        return validation_fn
+    
+    @classmethod
+    def get_validation_compilable_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[jax.Array], bool]:
+        """Get JIT-compilable validation function from config dict."""
+        config = BinaryGenomeConfig.from_dict(config_dict)
+        return cls.get_validation_compilable_from_config(config)
 
+    
+    @classmethod
+    def get_distance_compilable_from_config(cls, config:BinaryGenomeConfig = None) -> Callable[[jax.Array, jax.Array], int]:
+        """Get JIT-compilable distance function."""
+        def distance_fn(sol1, sol2):
+            return jnp.sum(sol1 != sol2).astype(int)
+        
+        return distance_fn
+    
+    @classmethod
+    def get_distance_compilable_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[jax.Array, jax.Array], int]:
+        """Get JIT-compilable distance function from config dict."""
+        config = BinaryGenomeConfig.from_dict(config_dict)
+        return cls.get_distance_compilable_from_config(config)  
+    
 
 
     def to_tensor(self) -> Array:
         """Convert the genome to a JAX tensor."""
         return self.genome.astype(jnp.int32)  # Use int32 for consistency
 
-    @classmethod
-    def from_tensor(cls, 
-                   tensor: Array,
-                   genome_init_params: Dict[str, Any],
-                   **kwargs: Any) -> 'BinaryGenome':
-        """Create a BinaryGenome from a JAX tensor."""
-        # Extract parameters from context if available
-        
-        # Create instance without random initialization
-        new_genome = cls(
-            **genome_init_params,  # Unpack the genome initialization parameters 
-            random_init=False,
-            **kwargs
-        )
-        # Set the genome tensor
-        new_genome.genome = tensor.astype(jnp.bool_)
-        # Validate
-        if not new_genome.is_valid:
-            raise ValueError(f"Genome created from tensor {new_genome.to_tensor() } is not valid")
-            
-        return new_genome
-
-    def get_serialization_context(self) -> SerializationContext:
-        """Get context needed to reconstruct this genome."""
-        return SerializationContext(
-            genome_class=type(self),
-            genome_init_params=self._init_params,
-            compatibility=self.compatibility,
-            **self.metadata
-        )
-
     def distance(self, other: 'BinaryGenome') -> float:
         """Calculate Hamming distance between two binary genomes."""
         if not isinstance(other, BinaryGenome):
             return float('inf')
             
-        if self.array_size != other.array_size:
+        if self.array_shape != other.array_shape:
             return float('inf')
             
         return float(jnp.sum(jnp.abs(self.to_tensor() - other.to_tensor())))
@@ -180,33 +205,6 @@ class BinaryGenome(AbstractGenome):
         binary_string = ''.join(str(int(x)) for x in self.genome.tolist())
         return hashlib.md5(binary_string.encode()).hexdigest()
 
-    def tree_flatten(self) -> Tuple[List[Array], Dict[str, Any]]:
-        """JAX tree flattening support."""
-        children = [self.genome]
-        aux_data = {
-            'array_size': self.array_size,
-            'p': self.p,
-            'metadata': self._metadata,
-            'compatibility': self.compatibility
-        }
-        return children, aux_data
-
-    @classmethod
-    def tree_unflatten(cls, aux_data: Dict[str, Any], children: List[Array]) -> 'BinaryGenome':
-        """JAX tree unflattening support."""
-        genome_array = children[0]
-        
-        new_genome = cls(
-            array_size=aux_data['array_size'],
-            p=aux_data['p'],
-            random_init=False,
-            compatibility=aux_data.get('compatibility')
-        )
-        new_genome.genome = genome_array
-        new_genome._metadata = aux_data.get('metadata', {})
-        
-        return new_genome
-
     def clone(self, deep: bool = True) -> 'BinaryGenome':
         """Create a copy of the genome.
         
@@ -215,10 +213,9 @@ class BinaryGenome(AbstractGenome):
             Note: JAX arrays are immutable, so deep/shallow makes no difference.
         """
         new_genome = self.__class__(
-            array_size=self.array_size,
+            array_shape=self.array_shape,
             p=self.p,
             random_init=False,
-            compatibility=self.compatibility,
             **self._metadata.copy()
         )
         
@@ -231,9 +228,9 @@ class BinaryGenome(AbstractGenome):
 
     def update_from_tensor(self, tensor: Array, validate: bool = False) -> None:
         """Update the genome data in-place from a tensor."""
-        if tensor.shape != (self.array_size,):
-            raise ValueError(f"Tensor shape {tensor.shape} incompatible with array_size {self.array_size}")
-            
+        if tensor.shape != self.array_shape:
+            raise ValueError(f"Tensor shape {tensor.shape} incompatible with array_shape {self.array_shape}")
+
         self.genome = tensor.astype(jnp.bool_)
         self.invalidate()
         
@@ -243,25 +240,17 @@ class BinaryGenome(AbstractGenome):
     def __str__(self) -> str:
         """String representation of the genome."""
         try:
-            return f"{self.genome}(size={self.array_size}, valid={self.is_valid})"
+            return f"{self.genome}(siarray_shapeze={self.array_shape}, valid={self.is_valid})"
         except Exception:
-            return f"{type(self).__name__}(size={self.array_size}, invalid_state)"
+            return f"{type(self).__name__}(array_shape={self.array_shape}, invalid_state)"
 
     def __repr__(self) -> str:
         """Detailed representation of the genome."""
         try:
             return (f"{self.__class__.__name__}("
-                   f"array_size={self.array_size}, "
+                   f"array_shape={self.array_shape}, "
                    f"p={self.p}, "
                    f"valid={self.is_valid}, "
                    f"semantic_key='{self.semantic_key()[:10]}...')")
         except Exception:
-            return f"{self.__class__.__name__}(array_size={self.array_size}, invalid_state)"
-
-
-# Register with JAX for tree operations
-jax.tree_util.register_pytree_node(
-    BinaryGenome,
-    BinaryGenome.tree_flatten,
-    BinaryGenome.tree_unflatten
-)
+            return f"{self.__class__.__name__}(array_shape={self.array_shape}, invalid_state)"

@@ -9,12 +9,12 @@ from .base import AbstractGenome
 from .binary import BinaryGenome
 from .real import RealGenome
 from .categorical import CategoricalGenome
-from .permutation import PermutationGenome
+#from .permutation import PermutationGenome
 
 __all__ = [
     "AbstractGenome",
     "BinaryGenome",
     "RealGenome",
     "CategoricalGenome",
-    "PermutationGenome"
+    #"PermutationGenome"
 ]

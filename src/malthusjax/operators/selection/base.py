@@ -2,116 +2,33 @@
 Base classes for selection operators with optimized JAX JIT support.
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, TypeVar, Generic, Callable, Tuple
-
-import jax  # type: ignore
-import jax.numpy as jnp # type: ignore
-import jax.random as jar # type: ignore
-from functools import partial # type: ignore
-
-from malthusjax.core.population.base import AbstractPopulation
+from typing import Callable
 from malthusjax.operators.base import AbstractGeneticOperator
+import jax # type: ignore
 
-P = TypeVar('P', bound=AbstractPopulation)
-
-class AbstractSelectionOperator(AbstractGeneticOperator[P], Generic[P]):
-    """Abstract base class for selection operators with optimized JAX JIT compilation.
-
-    Selection operators build and return JIT-compiled functions that operate directly
-    on genome data arrays for maximum performance.
+class AbstractSelectionOperator(AbstractGeneticOperator, ABC):
+    """Abstract base class for selection operators.
+    
+    Selection operators return a pure function with the signature:
+    (key: PRNGKey, fitness_values: jax.Array) -> selected_indices: jax.Array
     """
 
-    def __init__(self) -> None:
-        """Initialize selection operator with selection rate.
+    def __init__(self, number_of_choices: int) -> None:
+        """
+        Initialize the selection operator.
         
         Args:
-            selection_rate: Probability of selection for each element.
+            number_of_choices: The number of individuals to select (e.g., population size).
         """
         super().__init__()
-        self._compiled_fn = self._create_selection_function()
-
-        '''    def build(self, population: P) -> Callable:
-                    """Build the selection operator and return JIT-compiled function.
-
-                    Args:
-                        population: Population to build the operator for (used for shape inference).
-                        with_elitism: Whether to use elitism in selection.
-
-                    Returns:
-                        JIT-compiled function with signature:
-                        (genome_data_array, random_keys_array, selection_rate) -> selected_genome_data_array
-
-                    example:
-                        ```python
-                        selection_fn = selection_operator.build(population)
-                        selected_genomes = selection_fn(genome_data, random_keys)
-                        ```
-                        
-                    Raises:
-                        ValueError: If population is empty or does not have a validate method.
-                        TypeError: If population is not an instance of AbstractPopulation.
-                        RuntimeError: If the mutation function cannot be built due to invalid population.    
-                        
-                    """
-                    if population.size == 0:
-                        raise ValueError("Cannot build mutation operator for empty population")
-                    
-                    if not hasattr(population, 'validate'):
-                        raise ValueError(f"Type {type(population)} must have a validate method")
-                    population.validate()
-
-                    # Create the core selection function
-                    core_fn = self._create_selection_function(pop_size=population.size)
-
-                    self._compiled_fn = jax.jit(core_fn)
-                    self.built = True
-
-                    return self._compiled_fn
-            '''
-
+        self.number_of_choices = number_of_choices
 
     @abstractmethod
-    def _create_selection_function(self) -> Callable:
-        """Create the core selection function to be vectorized and JIT-compiled.
-
-        This function should be pure and operate on a single genome.
+    def get_compiled_function(self) -> Callable:
+        """
+        Returns a JIT-compiled function for performing selection.
         
-        Returns:
-            Function with signature (genome_data, random_key, selection_rate) -> selected_genome_data
+        The function will have the signature:
+        (key: jax.Array, fitness_values: jax.Array) -> selected_indices: jax.Array
         """
         pass
-    
-    def call(self, population: P,
-             fitness_values: jnp.ndarray,
-             random_key: jax.Array, **kwargs) -> P:
-        """Apply selection to the population using the compiled function.
-        
-        Args:
-            population: Input population to mutate.
-            random_key: JAX random key for reproducibility.
-            
-        Returns:
-            New population with mutated individuals.
-        """
-        #if not self.built:
-        #    self.build(population)
-
-        # Get the compiled function
-        mutation_fn = self.get_compiled_function()
-        
-        selected_indices = mutation_fn(fitness_values, jar.PRNGKey(42))
-
-        new_population = population.from_array_of_indexes(selected_indices)
-        
-        return new_population
-
-    def get_compiled_function(self) -> Callable:
-        """Get the compiled function after building.
-
-        Returns:
-            The compiled function returned by build().
-            
-        Raises:
-            ValueError: If operator hasn't been built yet.
-        """
-        return self._compiled_fn
