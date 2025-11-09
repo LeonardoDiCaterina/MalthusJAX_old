@@ -15,7 +15,7 @@ class CycleCrossover(AbstractCrossover):
     for each output required.
     """
     
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         """
         Returns a JIT-compiled function for cycle crossover.
         Ignores crossover_rate, as CX is typically an all-or-nothing operation.

@@ -32,9 +32,9 @@ class AbstractGeneticOperator(JAXTensorizable, ABC):
         super().__init__()
 
     @abstractmethod    
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         """
-        Get the pure, JIT-compilable function for this operator.
+        Get the pure, a Pure JAX function implementing the genetic operation.
         
         This function will have static arguments (like mutation_rate)
         partially applied and is ready for `jax.jit`.
@@ -43,6 +43,23 @@ class AbstractGeneticOperator(JAXTensorizable, ABC):
             A callable JAX function.
         """
         pass
+    
+    @abstractmethod
+    def verify_signature(self, *args  ) -> bool:
+        """
+        Verify that the compiled function follows the correct signature.
+        
+        Args:
+            test_genome_shape: Shape of test genome for validation.
+            
+        Returns:
+            True if signature is correct, False otherwise.
+            
+        Raises:
+            Exception with details if the signature test fails.
+        """
+        pass
+    
     
     def from_tensor():
         """Genetic operators do not require tensor deserialization."""

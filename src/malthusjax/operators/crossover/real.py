@@ -14,7 +14,7 @@ class UniformCrossover(AbstractCrossover):
     - If `n_outputs=2`: Offspring1 is (P1 where mask, P2 where ~mask)
                         Offspring2 is (P2 where mask, P1 where ~mask)
     """
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         return partial(
             _uniform_crossover,
             crossover_rate=self.crossover_rate,
@@ -49,7 +49,7 @@ class SinglePointCrossover(AbstractCrossover):
     - If `n_outputs=2`: Offspring1 is [P1_head, P2_tail]
                         Offspring2 is [P2_head, P1_tail]
     """
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         # Crossover rate is ignored for single point, but part of base class
         return partial(
             _single_point_crossover,
@@ -95,7 +95,7 @@ class AverageCrossover(AbstractCrossover):
         # Pass blend_rate as the crossover_rate to the base class
         super().__init__(crossover_rate=blend_rate, n_outputs=n_outputs)
 
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         return partial(
             _average_crossover,
             blend_rate=self.crossover_rate, # Use the rate as the blend_rate

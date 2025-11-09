@@ -12,7 +12,7 @@ class UniformCrossover(AbstractCrossover):
     - If `n_outputs=2`: Offspring1 is (P1 where mask, P2 where ~mask)
                         Offspring2 is (P2 where mask, P1 where ~mask)
     """
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         return partial(
             _uniform_crossover,
             crossover_rate=self.crossover_rate,
@@ -26,7 +26,7 @@ class SinglePointCrossover(AbstractCrossover):
     - If `n_outputs=2`: Offspring1 is [P1_head, P2_tail]
                         Offspring2 is [P2_head, P1_tail]
     """
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         return partial(
             _single_point_crossover,
             n_outputs=self.n_outputs

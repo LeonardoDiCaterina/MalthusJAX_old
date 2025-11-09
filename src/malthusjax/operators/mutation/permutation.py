@@ -1,7 +1,7 @@
 from typing import Callable
-import jax
-import jax.numpy as jnp
-import jax.random as jar
+import jax # type: ignore
+import jax.numpy as jnp # type: ignore
+import jax.random as jar  # type: ignore
 from malthusjax.operators.mutation.base import AbstractMutation
 import functools
 
@@ -13,7 +13,7 @@ class ScrambleMutation(AbstractMutation):
     def __init__(self, mutation_rate: float) -> None:
         super().__init__(mutation_rate=mutation_rate)
 
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         return functools.partial(
             _scramble_mutation,
             mutation_rate=self.mutation_rate
@@ -28,7 +28,7 @@ class SwapMutation(AbstractMutation):
     def __init__(self, mutation_rate: float) -> None:
         super().__init__(mutation_rate=mutation_rate)
 
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         return functools.partial(
             _swap_mutation,
             mutation_rate=self.mutation_rate

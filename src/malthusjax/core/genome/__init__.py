@@ -5,7 +5,7 @@ This module provides abstract base classes and concrete implementations for
 genome representations in evolutionary algorithms.
 """
 
-from .base import AbstractGenome
+from .base import AbstractGenome, AbstractGenomeConfig
 from .binary import BinaryGenome
 from .real import RealGenome
 from .categorical import CategoricalGenome
@@ -16,5 +16,6 @@ __all__ = [
     "BinaryGenome",
     "RealGenome",
     "CategoricalGenome",
-    #"PermutationGenome"
+    #"PermutationGenome",
+    "AbstractGenomeConfig",
 ]

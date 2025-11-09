@@ -27,9 +27,9 @@ class CategoricalFlipMutation(AbstractMutation):
             raise ValueError("num_categories must be 2 or more.")
         self.num_categories = num_categories
 
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         """
-        Returns a JIT-compiled function for categorical flip mutation.
+        Returns a JIT-compilable function for categorical flip mutation.
         
         The function signature is:
         (key: jax.Array, genome: jax.Array) -> mutated_genome: jax.Array
