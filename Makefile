@@ -1,53 +1,49 @@
-# File: MalthusJAX/Makefile
-.PHONY: help install install-dev test test-cov lint format clean setup-dev
-.DEFAULT_GOAL := help
+# Makefile for MalthusJAX
+#
+# This file provides convenient aliases for common development tasks.
+# All configurations are stored in `pyproject.toml`.
 
-help: ## Show this help message
-    @echo "MalthusJAX Development Commands:"
-    @echo "================================"
-    @grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+# Use .PHONY to ensure these commands run even if files with these names exist
+.PHONY: help install-dev test lint format type-check check-all docs
 
-install: ## Install package in development mode
-    pip install -e .
+# Default target: show help
+help:
+	@echo "--- MalthusJAX Development ---"
+	@echo "  make install-dev    Install for development"
+	@echo "  make test           Run pytest with coverage"
+	@echo "  make lint           Check for linting errors with Ruff"
+	@echo "  make format         Format code with Ruff"
+	@echo "  make type-check     Run mypy type checker"
+	@echo "  make check-all      Run all checks (lint, format, types, test)"
+	@echo "  make docs           Build the Sphinx documentation"
 
-install-dev: ## Install package with development dependencies  
-    pip install -e ".[dev]"
+install-dev:
+	@echo "--- Installing development dependencies ---"
+	pip install -e ".[dev,docs,examples]"
 
-install-all: ## Install package with all dependencies
-    pip install -e ".[all]"
+test:
+	@echo "--- Running tests with coverage ---"
+	pytest
 
-test: ## Run all tests
-    pytest
+lint:
+	@echo "--- Checking code quality with Ruff ---"
+	ruff check .
 
-test-cov: ## Run tests with coverage report
-    pytest --cov=src/malthusjax --cov-report=html --cov-report=term-missing
+format:
+	@echo "--- Formatting code with Ruff ---"
+	ruff format .
 
-lint: ## Run all linting checks
-    @echo "Running flake8..."
-    flake8 src tests
-    @echo "Running black check..."
-    black --check src tests  
-    @echo "Running isort check..."
-    isort --check-only src tests
+type-check:
+	@echo "--- Running mypy type checker ---"
+	mypy src
 
-format: ## Format code with black and isort
-    @echo "Formatting with black..."
-    black src tests
-    @echo "Sorting imports with isort..."
-    isort src tests
+check-all: lint format type-check test
+	@echo "--- All checks passed! ---"
 
-type-check: ## Run type checking with mypy
-    mypy src/malthusjax
-
-clean: ## Remove build artifacts and cache
-    rm -rf build/ dist/ *.egg-info/
-    rm -rf .coverage htmlcov/ .pytest_cache/ .mypy_cache/
-    find . -type d -name __pycache__ -delete
-    find . -type f -name "*.pyc" -delete
-
-setup-dev: install-dev ## Setup complete development environment
-    @echo "🎉 Development environment setup complete!"
-    @echo "💡 Try: make test, make format, make lint"
-
-check-all: lint type-check test ## Run all quality checks and tests
-    @echo "✅ All checks passed!"
+docs:
+	@echo "--- Building documentation ---"
+	sphinx-build -b html docs/source docs/build/html
+	# sphinx-build: This is the main Sphinx command
+	# -b html: This says "use the HTML builder"
+	# docs/source: This is the source directory for the docs
+	# docs/build/html: This is where the built HTML files will go
