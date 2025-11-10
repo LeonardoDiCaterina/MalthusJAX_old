@@ -27,7 +27,7 @@ class SphereFitnessEvaluator(AbstractFitnessEvaluator):
             Returns:
                 Fitness value as float
             """
-            return jnp.sum(genome_tensor ** 2)
+            return jnp.sum(genome_tensor ** 2)*-1
         
         return tensor_fitness_function
     

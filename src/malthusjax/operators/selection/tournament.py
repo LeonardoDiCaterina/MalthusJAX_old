@@ -23,9 +23,9 @@ class TournamentSelection(AbstractSelectionOperator):
         super().__init__(number_of_choices=number_of_choices)
         self.tournament_size = tournament_size
 
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         """
-        Returns a JIT-compiled function for tournament selection.
+        Returns a JIT-compilable function for tournament selection.
         """
         # Bake static parameters into the pure function
         return functools.partial(

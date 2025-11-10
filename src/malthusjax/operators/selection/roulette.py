@@ -17,9 +17,9 @@ class RouletteSelection(AbstractSelectionOperator):
     def __init__(self, number_choices: int) -> None:
         super().__init__(number_of_choices=number_choices)
 
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         """
-        Returns a JIT-compiled function for roulette wheel selection.
+        Returns a JIT-compilable function for roulette wheel selection.
         """
         # Bake static parameters into the pure function
         return functools.partial(

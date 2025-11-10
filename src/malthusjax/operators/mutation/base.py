@@ -33,10 +33,67 @@ class AbstractMutation(AbstractGeneticOperator, ABC):
         self.n_outputs = n_outputs
         
     @abstractmethod
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         """
-        Returns a JIT-compiled function for performing mutation.
+        Returns a pure function implementing the mutation logic.
         
         The function will have the signature:
         (key: jax.Array, genome: jax.Array) -> mutated_genome: jax.Array
         """
+    
+    def verify_signature(self, test_genome_shape: Tuple[int, ...] = (5,)) -> bool:
+        """
+        Verify that the compiled function follows the correct signature.
+        
+        Args:
+            test_genome_shape: Shape of test genome for validation.
+            
+        Returns:
+            True if signature is correct, False otherwise.
+            
+        Raises:
+            Exception with details if the signature test fails.
+        """
+        try:
+            # Create test data
+            test_key = jar.PRNGKey(0)
+            test_genome = jnp.ones(test_genome_shape, dtype=jnp.float32)
+            
+            # Get the compiled function
+            mutation_fn = self.get_compiled_function()
+            
+            # Test correct signature: (key, genome)
+            try:
+                result = mutation_fn(test_key, test_genome)
+                
+                # Verify result has expected properties
+                if not isinstance(result, jax.Array):
+                    raise ValueError(f"Expected jax.Array output, got {type(result)}")
+                
+                # For most mutations, output should have same shape as input
+                # (some operators might change this, but this is the common case)
+                expected_shape = test_genome.shape
+                if result.shape != expected_shape:
+                    print(f"Warning: Output shape {result.shape} != input shape {expected_shape}")
+                
+                print(f"✅ {self.__class__.__name__} signature verified: (key, genome) -> result")
+                return True
+                
+            except Exception as e:
+                # Try wrong signature: (genome, key) to give helpful error
+                try:
+                    wrong_result = mutation_fn(test_genome, test_key)
+                    raise ValueError(
+                        f"❌ {self.__class__.__name__} uses WRONG signature (genome, key). "
+                        f"Should be (key, genome). Error with correct signature: {e}"
+                    )
+                except:
+                    # Both failed, show the original error
+                    raise ValueError(
+                        f"❌ {self.__class__.__name__} signature test failed. "
+                        f"Expected (key, genome) -> result. Error: {e}"
+                    )
+                    
+        except Exception as e:
+            print(f"❌ Signature verification failed for {self.__class__.__name__}: {e}")
+            return False

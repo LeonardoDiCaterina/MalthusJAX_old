@@ -21,9 +21,9 @@ class BallMutation(AbstractMutation):
         super().__init__(mutation_rate=mutation_rate)
         self.mutation_strength = jnp.abs(mutation_strength)
 
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         """
-        Returns a JIT-compiled function for ball mutation.
+        Returns a JIT-compilable function for ball mutation.
         
         The function signature is:
         (key: jax.Array, genome: jax.Array) -> mutated_genome: jax.Array
