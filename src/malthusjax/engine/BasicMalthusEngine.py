@@ -114,7 +114,7 @@ class BasicMalthusEngine(AbstractMalthusEngine):
         """
         # --- Population Initialization ---
         if population_array is None:
-            init_fn = self._genome_representation.get_random_initialization_compilable()
+            init_fn = self._genome_representation.get_random_initialization_pure()
             pop_keys = jar.split(key, pop_size)
             population_array = jax.vmap(
                 init_fn,

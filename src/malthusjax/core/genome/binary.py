@@ -119,26 +119,25 @@ class BinaryGenome(AbstractGenome):
     
     
     @classmethod
-    def get_random_initialization_compilable_from_config(cls, config: BinaryGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
+    def get_random_initialization_pure_from_config(cls, config: BinaryGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization that will receive a random key and return a tensor."""
         
         def init_fn(random_key:jnp.ndarray, array_shape: Tuple, p: float) -> jnp.ndarray:
             genome = jar.bernoulli(random_key, p=p, shape=array_shape).astype(jnp.bool_)
             return genome
         
-        print(f"Compiling random initialization function with array_shape={config.array_shape}, p={config.p}")
         return functools.partial(init_fn, array_shape=config.array_shape, p=config.p)
     
     
     @classmethod
-    def get_random_initialization_compilable_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
+    def get_random_initialization_pure_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization from config dict."""
         config = BinaryGenomeConfig.from_dict(config_dict)
-        return cls.get_random_initialization_compilable_from_config(config)
+        return cls.get_random_initialization_pure_from_config(config)
     
 
     @classmethod
-    def get_autocorrection_compilable_from_config(cls, config:BinaryGenomeConfig = None) -> Callable[[jax.Array], jax.Array]:
+    def get_autocorrection_pure_from_config(cls, config:BinaryGenomeConfig = None) -> Callable[[jax.Array], jax.Array]:
         """Get JIT-compilable correction function for the solution."""
         def correction_fn(sol: jax.Array) -> jax.Array:
             return jnp.clip(sol, 0, 1)
@@ -146,14 +145,14 @@ class BinaryGenome(AbstractGenome):
         return correction_fn
     
     @classmethod
-    def get_initialization_compilable_from_dict(cls, config: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
+    def get_initialization_pure_from_dict(cls, config: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
         """Get JIT-compilable function for genome initialization from config dict."""
         config_obj = BinaryGenomeConfig.from_dict(config)
-        return cls.get_random_initialization_compilable_from_config(config_obj)
+        return cls.get_random_initialization_pure_from_config(config_obj)
     
 
     @classmethod
-    def get_validation_compilable_from_config(self, config:BinaryGenomeConfig = None) -> Callable[[jax.Array], bool]:
+    def get_validation_pure_from_config(self, config:BinaryGenomeConfig = None) -> Callable[[jax.Array], bool]:
         """Get JIT-compilable validation function."""
         def validation_fn(sol: jax.Array) -> jax.Array:
             # Return boolean array indicating validity
@@ -163,14 +162,14 @@ class BinaryGenome(AbstractGenome):
         return validation_fn
     
     @classmethod
-    def get_validation_compilable_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[jax.Array], bool]:
+    def get_validation_pure_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[jax.Array], bool]:
         """Get JIT-compilable validation function from config dict."""
         config = BinaryGenomeConfig.from_dict(config_dict)
-        return cls.get_validation_compilable_from_config(config)
+        return cls.get_validation_pure_from_config(config)
 
     
     @classmethod
-    def get_distance_compilable_from_config(cls, config:BinaryGenomeConfig = None) -> Callable[[jax.Array, jax.Array], int]:
+    def get_distance_pure_from_config(cls, config:BinaryGenomeConfig = None) -> Callable[[jax.Array, jax.Array], int]:
         """Get JIT-compilable distance function."""
         def distance_fn(sol1, sol2):
             return jnp.sum(sol1 != sol2).astype(int)
@@ -178,10 +177,10 @@ class BinaryGenome(AbstractGenome):
         return distance_fn
     
     @classmethod
-    def get_distance_compilable_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[jax.Array, jax.Array], int]:
+    def get_distance_pure_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[jax.Array, jax.Array], int]:
         """Get JIT-compilable distance function from config dict."""
         config = BinaryGenomeConfig.from_dict(config_dict)
-        return cls.get_distance_compilable_from_config(config)  
+        return cls.get_distance_pure_from_config(config)  
     
 
 

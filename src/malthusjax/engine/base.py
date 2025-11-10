@@ -27,7 +27,7 @@ class AbstractMalthusEngine(ABC):
         self.elitism = elitism
         
         # 1. Get all the pure JAX functions from our factories
-        self.init_fn = genome_representation.get_random_initialization_compilable()
+        self.init_fn = genome_representation.get_random_initialization_pure()
         self.fitness_fn = fitness_evaluator.get_tensor_fitness_function()
         self.selection_fn = selection_op.get_pure_function()
         self.crossover_fn = crossover_op.get_pure_function()

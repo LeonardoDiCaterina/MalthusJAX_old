@@ -144,17 +144,17 @@ class AbstractGenome(JAXTensorizable, ABC):
         
     @classmethod
     @abstractmethod
-    def get_random_initialization_compilable_from_config(cls, config: AbstractGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
+    def get_random_initialization_pure_from_config(cls, config: AbstractGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization that will receive a random key and return a tensor."""
         pass
     
-    def get_random_initialization_compilable(self) -> Callable[[Optional[int]], jnp.ndarray]:
+    def get_random_initialization_pure(self) -> Callable[[Optional[int]], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization that will receive a random key and return a tensor."""
-        return self.get_random_initialization_compilable_from_config(self.genome_config)
+        return self.get_random_initialization_pure_from_config(self.genome_config)
 
     def _random_init(self) -> None:
         """Initialize genome with random values."""
-        init_fn = self.get_random_initialization_compilable_from_config(self.genome_config)
+        init_fn = self.get_random_initialization_pure_from_config(self.genome_config)
         random_key = self.random_key # This uses the property which splits the key
         if random_key is None:
             raise ValueError("Random key is not set for random_init")
@@ -164,51 +164,51 @@ class AbstractGenome(JAXTensorizable, ABC):
     
     @classmethod
     @abstractmethod
-    def get_validation_compilable_from_config(cls, config: AbstractGenomeConfig) -> Callable[[jax.Array], bool]:
+    def get_validation_pure_from_config(cls, config: AbstractGenomeConfig) -> Callable[[jax.Array], bool]:
         """Get JIT-compilable function that returns a boolean indicating if genome is valid."""
         pass
     
-    def get_validation_compilable(self) -> Callable[[jax.Array], bool]:
+    def get_validation_pure(self) -> Callable[[jax.Array], bool]:
         """Get JIT-compilable function that returns a boolean indicating if genome is valid."""
-        return self.get_validation_compilable_from_config(self.genome_config)
+        return self.get_validation_pure_from_config(self.genome_config)
 
     @abstractmethod
     def _validate(self) -> bool:
         """Validate the genome's structure and constraints."""
-        validation_fn = self.get_validation_compilable()
+        validation_fn = self.get_validation_pure()
         return bool(validation_fn(self.to_tensor()))
     
     @classmethod
     @abstractmethod
-    def get_distance_compilable_from_config(self, config: AbstractGenomeConfig) -> Callable[[jax.Array, jax.Array], float]:
+    def get_distance_pure_from_config(self, config: AbstractGenomeConfig) -> Callable[[jax.Array, jax.Array], float]:
         """Get JIT-compilable function to compute distance between two genomes."""
         pass
     
-    def get_distance_compilable(self) -> Callable[[jax.Array, jax.Array], float]:
+    def get_distance_pure(self) -> Callable[[jax.Array, jax.Array], float]:
         """Get JIT-compilable function to compute distance between two genomes."""
-        return self.get_distance_compilable_from_config(self.genome_config)
+        return self.get_distance_pure_from_config(self.genome_config)
     
     def _distance(self, other: 'AbstractGenome') -> float:
         """Compute distance to another genome."""
         if not isinstance(other, type(self)):
             raise TypeError(f"Distance can only be computed between type {type(self)} instances, got type {type(other)}")
-        distance_fn, _ = self.get_distance_compilable()
+        distance_fn, _ = self.get_distance_pure()
         return float(distance_fn(self.to_tensor(), other.to_tensor()))
 
     
     @classmethod
     @abstractmethod
-    def get_autocorrection_compilable_from_config(cls, config: AbstractGenomeConfig) -> Callable[[jax.Array], jax.Array]:
+    def get_autocorrection_pure_from_config(cls, config: AbstractGenomeConfig) -> Callable[[jax.Array], jax.Array]:
         """Get JIT-compilable function that turns invalid genomes into valid ones."""
         pass
     
-    def get_autocorrection_compilable(self) -> Callable[[jax.Array], jax.Array]:
+    def get_autocorrection_pure(self) -> Callable[[jax.Array], jax.Array]:
         """Get JIT-compilable function that turns invalid genomes into valid ones."""
-        return self.get_autocorrection_compilable_from_config(self.genome_config)
+        return self.get_autocorrection_pure_from_config(self.genome_config)
     
     def _autocorrect(self) -> None:
         """Autocorrect the genome to make it valid."""
-        correction_fn, _ = self.get_autocorrection_compilable()
+        correction_fn, _ = self.get_autocorrection_pure()
         tensor = correction_fn(self.to_tensor())
         self.update_from_tensor(tensor, validate=True)
 
