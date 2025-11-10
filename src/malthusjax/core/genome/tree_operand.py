@@ -99,7 +99,7 @@ class TreeOperandGenome(AbstractGenome):
 
     def _random_init(self) -> None:
         """Randomly initialize the genome as a real array."""
-        init_fn = self.get_random_initialization_compilable_from_config(self.genome_config)
+        init_fn = self.get_random_initialization_pure_from_config(self.genome_config)
                 
         self.genome = init_fn(self.random_key)
                             
@@ -138,7 +138,7 @@ class TreeOperandGenome(AbstractGenome):
                   
 
     @classmethod
-    def get_random_initialization_compilable_from_config(cls, config: TreeOperandGenomeConfig) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    def get_random_initialization_pure_from_config(cls, config: TreeOperandGenomeConfig) -> Callable[[jnp.ndarray], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization that will receive an ARRAY of random keys and return a tensor."""
         
         def init_atomic_tree(random_key: jnp.ndarray, max_value: jnp.ndarray) -> jnp.ndarray:
@@ -167,22 +167,22 @@ class TreeOperandGenome(AbstractGenome):
     
     
     @classmethod
-    def get_random_initialization_compilable_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    def get_random_initialization_pure_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[jnp.ndarray], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization from config dict."""
         config = TreeOperandGenomeConfig.from_dict(config_dict)
-        return cls.get_random_initialization_compilable_from_config(config)
+        return cls.get_random_initialization_pure_from_config(config)
     
     @classmethod
-    def get_autocorrection_compilable_from_config(cls, config:TreeOperandGenomeConfig = None) -> Callable[[jax.Array], jax.Array]:
+    def get_autocorrection_pure_from_config(cls, config:TreeOperandGenomeConfig = None) -> Callable[[jax.Array], jax.Array]:
         raise NotImplementedError("Autocorrection is not implemented for OperandGenome.")
 
     @classmethod
-    def get_validation_compilable_from_config(self, validation_config:TreeOperandGenomeConfig = None) -> Callable[[jax.Array], bool]:
+    def get_validation_pure_from_config(self, validation_config:TreeOperandGenomeConfig = None) -> Callable[[jax.Array], bool]:
         raise NotImplementedError("Validation is not implemented for OperandGenome.")
 
     
     @classmethod
-    def get_distance_compilable_from_config(cls, config:TreeOperandGenomeConfig = None, type:str = 'hamming' ) -> Callable[[jax.Array, jax.Array], int]:
+    def get_distance_pure_from_config(cls, config:TreeOperandGenomeConfig = None, type:str = 'hamming' ) -> Callable[[jax.Array, jax.Array], int]:
         """Get JIT-compilable distance function
             you can choose between 'hamming' and 'euclidean' distance types
         """
@@ -210,7 +210,7 @@ class TreeOperandGenome(AbstractGenome):
         if self.array_shape != other.array_shape:
             return float('inf')
         
-        distance_fn, _ = self.get_distance_compilable_from_config(type=type)
+        distance_fn, _ = self.get_distance_pure_from_config(type=type)
         return float(distance_fn(self.to_tensor(dtype=dtype), other.to_tensor(dtype=dtype)))   
             
     def semantic_key(self) -> str:

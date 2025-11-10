@@ -123,7 +123,7 @@ class CategoricalGenome(AbstractGenome):
         return self.genome_config
     
     @classmethod
-    def get_random_initialization_compilable_from_config(cls, config: CategoricalGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
+    def get_random_initialization_pure_from_config(cls, config: CategoricalGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization that will receive a random key and return a tensor."""
         
         def init_fn(random_key:jnp.ndarray , init_config:CategoricalGenomeConfig) -> jnp.ndarray:
@@ -133,17 +133,16 @@ class CategoricalGenome(AbstractGenome):
                                   maxval=init_config.num_categories).astype(jnp.int32)
             return genome
         
-        print(f"Compiling random initialization function with array_shape={config.array_shape}, num_categories={config.num_categories}")
         return functools.partial(init_fn, init_config=config)
     
     @classmethod
-    def get_random_initialization_compilable_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
+    def get_random_initialization_pure_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization from a config dictionary."""
         config = CategoricalGenomeConfig.from_dict(config_dict)
-        return cls.get_random_initialization_compilable_from_config(config)
+        return cls.get_random_initialization_pure_from_config(config)
 
     @classmethod
-    def get_autocorrection_compilable_from_config(cls, config:CategoricalGenomeConfig = None) -> Callable[[jax.Array], jax.Array]:
+    def get_autocorrection_pure_from_config(cls, config:CategoricalGenomeConfig = None) -> Callable[[jax.Array], jax.Array]:
         """Get JIT-compilable correction function for the solution."""
         def correction_fn(sol: jax.Array, correction_cofig:CategoricalGenomeConfig) -> jax.Array:
             return jnp.clip(sol, 0, correction_cofig.num_categories - 1).astype(jnp.int32)
@@ -152,7 +151,7 @@ class CategoricalGenome(AbstractGenome):
     
 
     @classmethod
-    def get_validation_compilable_from_config(self, validation_config:CategoricalGenomeConfig = None) -> Callable[[jax.Array], bool]:
+    def get_validation_pure_from_config(self, validation_config:CategoricalGenomeConfig = None) -> Callable[[jax.Array], bool]:
         """Get JIT-compilable validation function."""
         def validation_fn(sol: jax.Array, validation_config:CategoricalGenomeConfig) -> bool:
             is_within_bounds = jnp.all((sol >= 0) & (sol < validation_config.num_categories))
@@ -162,7 +161,7 @@ class CategoricalGenome(AbstractGenome):
 
     
     @classmethod
-    def get_distance_compilable_from_config(cls, config:CategoricalGenomeConfig = None, type:str = 'hamming' ) -> Callable[[jax.Array, jax.Array], int]:
+    def get_distance_pure_from_config(cls, config:CategoricalGenomeConfig = None, type:str = 'hamming' ) -> Callable[[jax.Array, jax.Array], int]:
         """Get JIT-compilable distance function
             you can choose between 'hamming' and 'euclidean' distance types
         """
@@ -190,7 +189,7 @@ class CategoricalGenome(AbstractGenome):
         if self.array_shape != other.array_shape:
             return float('inf')
         
-        distance_fn, _ = self.get_distance_compilable_from_config(type=type)
+        distance_fn, _ = self.get_distance_pure_from_config(type=type)
         return float(distance_fn(self.to_tensor(dtype=dtype), other.to_tensor(dtype=dtype)))   
             
     def semantic_key(self) -> str:

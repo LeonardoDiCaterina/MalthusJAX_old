@@ -122,7 +122,7 @@ class RealGenome(AbstractGenome):
     
     
     @classmethod
-    def get_random_initialization_compilable_from_config(cls, config: RealGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
+    def get_random_initialization_pure_from_config(cls, config: RealGenomeConfig) -> Callable[[Optional[int]], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization that will receive a random key and return a tensor."""
         
         def init_fn(random_key: jar.PRNGKey, init_config:RealGenomeConfig) -> jnp.ndarray:
@@ -136,16 +136,15 @@ class RealGenome(AbstractGenome):
         return functools.partial(init_fn, init_config=config)
     
     @classmethod
-    def get_random_initialization_compilable_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
+    def get_random_initialization_pure_from_dict(cls, config_dict: Dict[str, Any]) -> Callable[[Optional[int]], jnp.ndarray]:
         """Get JIT-compilable function for random genome initialization from a config dict."""
         
         config = RealGenomeConfig.from_dict(config_dict)
-        print(f"Compiling random initialization function with array_shape={config.array_shape}, min_val={config.min_val}, max_val={config.max_val}")
-        return cls.get_random_initialization_compilable_from_config(config)
+        return cls.get_random_initialization_pure_from_config(config)
     
 
     @classmethod
-    def get_autocorrection_compilable_from_config(cls, config:RealGenomeConfig = None) -> Callable[[jax.Array], jax.Array]:
+    def get_autocorrection_pure_from_config(cls, config:RealGenomeConfig = None) -> Callable[[jax.Array], jax.Array]:
         """Get JIT-compilable correction function for the solution."""
         def correction_fn(sol: jax.Array, correction_cofig:RealGenomeConfig) -> jax.Array:
             return jnp.clip(sol, correction_cofig.min_val, correction_cofig.max_val)
@@ -154,7 +153,7 @@ class RealGenome(AbstractGenome):
     
 
     @classmethod
-    def get_validation_compilable_from_config(self, validation_config:RealGenomeConfig = None) -> Callable[[jax.Array], bool]:
+    def get_validation_pure_from_config(self, validation_config:RealGenomeConfig = None) -> Callable[[jax.Array], bool]:
         """Get JIT-compilable validation function."""
         def validation_fn(sol: jax.Array, validation_config:RealGenomeConfig) -> bool:
             is_within_bounds = jnp.all(jnp.logical_and(sol >= validation_config.min_val, sol <= validation_config.max_val))
@@ -164,7 +163,7 @@ class RealGenome(AbstractGenome):
 
     
     @classmethod
-    def get_distance_compilable_from_config(cls, config:RealGenomeConfig = None, type:str = "euclidean") -> Callable[[jax.Array, jax.Array], int]:
+    def get_distance_pure_from_config(cls, config:RealGenomeConfig = None, type:str = "euclidean") -> Callable[[jax.Array, jax.Array], int]:
         """Get JIT-compilable distance function
             you can choose between 'euclidean', 'manhattan' and 'chebyshev' distance types."""
         if type == "euclidean":
@@ -191,7 +190,7 @@ class RealGenome(AbstractGenome):
         if self.array_shape != other.array_shape:
             return float('inf')
         
-        distance_fn, _ = self.get_distance_compilable_from_config(type=type)
+        distance_fn, _ = self.get_distance_pure_from_config(type=type)
         return float(distance_fn(self.to_tensor(dtype=dtype), other.to_tensor(dtype=dtype)))   
             
     def semantic_key(self) -> str:
