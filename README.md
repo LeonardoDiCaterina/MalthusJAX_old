@@ -1,6 +1,6 @@
 # MalthusJAX
 
-A JAX-based framework for evolutionary computation with emphasis on high-performance, tensorized operations and research-grade experimentation.
+A JAX-based framework for evolutionary computation
 
 ![JAX](https://img.shields.io/badge/JAX-0.4+-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.8+-green.svg)
@@ -43,7 +43,7 @@ src/malthusjax/
 
 ### Install from source
 ```bash
-git clone https://github.com/yourusername/MalthusJAX.git
+git clone https://github.com/LeonardoDiCaterina/MalthusJAX.git
 cd MalthusJAX
 pip install -e .
 ```
@@ -171,7 +171,6 @@ Check out the comprehensive examples in the [`examples/`](examples/) directory:
 - [`Demo_LV_1.ipynb`](examples/Demo_LV_1.ipynb): Core genomes and fitness functions
 - [`Demo_LV_2.ipynb`](examples/Demo_LV_2.ipynb): Genetic operators and population dynamics
 - [`Demo_LV_3.ipynb`](examples/Demo_LV_3.ipynb): Complete evolution engines and performance analysis
-- [`demos/`](examples/demos/): Detailed component demonstrations
 
 ## Research Applications
 
@@ -223,18 +222,6 @@ make check-all
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Citation
-
-If you use MalthusJAX in your research, please cite:
-
-```bibtex
-@software{malthusjax2024,
-  title={MalthusJAX: A JAX-based Framework for Evolutionary Computation},
-  author={Leonardo DiCaterina},
-  year={2024},
-  url={https://github.com/yourusername/MalthusJAX}
-}
-```
 
 ## Acknowledgments
 
@@ -245,8 +232,8 @@ If you use MalthusJAX in your research, please cite:
 ## Support
 
 - 📧 Email: [leonardo.dicaterina@mail.polimi.it], [20240485@novaims.unl.pt]
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/MalthusJAX/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/yourusername/MalthusJAX/discussions)
+- 🐛 Issues: [GitHub Issues](https://github.com/LeonardoDiCaterina/MalthusJAX/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/LeonardoDiCaterina/MalthusJAX/discussions)
 
 ---
 
