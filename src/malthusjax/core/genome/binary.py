@@ -7,7 +7,7 @@ binary optimization problems and as a reference implementation.
 
 from dataclasses import dataclass
 import functools
-from typing import Any, Optional, Dict, Tuple, List, Callable
+from typing import Any, Optional, Dict, Tuple, Callable
 
 import jax.numpy as jnp  # type: ignore
 from jax import Array  # type: ignore 
@@ -48,7 +48,7 @@ class BinaryGenome(AbstractGenome):
                  array_shape:Tuple[int, ...],
                  p: float,
                  random_init: bool = False,
-                 random_key: Optional[int] = None,
+                 random_key: Optional[jnp.ndarray] = None,
                  **kwargs: Any):
         """
         Initialize binary genome.
@@ -61,7 +61,8 @@ class BinaryGenome(AbstractGenome):
             **kwargs: Additional metadata
         """
         self.array_shape = array_shape
-        assert 0 <= p <= 1, "p must be between 0 and 1"
+        if 0 >= p or p >= 1:
+            raise ValueError (f"p must be between 0 and 1 it is {p}")
         self.p = p
 
             
@@ -239,7 +240,7 @@ class BinaryGenome(AbstractGenome):
     def __str__(self) -> str:
         """String representation of the genome."""
         try:
-            return f"{self.genome}(siarray_shapeze={self.array_shape}, valid={self.is_valid})"
+            return f"{self.genome}(array_shape={self.array_shape}, valid={self.is_valid})"
         except Exception:
             return f"{type(self).__name__}(array_shape={self.array_shape}, invalid_state)"
 

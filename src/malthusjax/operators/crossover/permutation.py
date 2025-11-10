@@ -85,7 +85,7 @@ class PillarCrossover(AbstractCrossover):
     and shuffles the remaining genes.
     """
     
-    def get_compiled_function(self) -> Callable:
+    def get_pure_function(self) -> Callable:
         """
         Returns a JIT-compiled function for pillar crossover.
         Ignores crossover_rate.

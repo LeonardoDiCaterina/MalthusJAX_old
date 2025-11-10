@@ -6,7 +6,7 @@ This module provides a simple integer genome representing operand values,
 
 from dataclasses import dataclass
 import functools
-from typing import Any, Optional, Dict, Tuple, List, Callable
+from typing import Any, Optional, Dict, Callable
 
 import jax.numpy as jnp  # type: ignore
 from jax import Array  # type: ignore 
@@ -43,7 +43,7 @@ jax.tree_util.register_pytree_node(
 
 class TreeOperandGenome(AbstractGenome):
     """
-    Binary genome implementation for real optimization problems.
+    Tree operand genome representation.
     
     Represents candidate solutions as real-valued arrays.
     """
@@ -52,30 +52,34 @@ class TreeOperandGenome(AbstractGenome):
                     n_operands_per_node: int,
                     maximum_depth: int,
                     n_features_dataset: int,
-                 random_init: bool = False,
-                 random_key: Optional[int] = None,
-                 **kwargs: Any):
+                    random_init: bool = False,
+                    random_key: Optional[jnp.ndarray] = None,
+                    **kwargs: Any):
         """
         Initialize Categorical genome.
         
         Args:
-            array_shape: array_shape of the real array
-            p: Probability of 1s during random initialization
+            n_operands_per_node: Number of operands per tree node
+            maximum_depth: Maximum depth of the tree
+            n_features_dataset: Number of features in the dataset
             random_init: Whether to randomly initialize
             random_key: Random seed
             **kwargs: Additional metadata
         """
 
-        assert n_operands_per_node > 0, "n_operands_per_node must be greater than 0"
-        assert maximum_depth > 0, "maximum_depth must be greater than 0"
-        assert n_features_dataset > 0, "n_features_dataset must be greater than 0"
+        if n_operands_per_node <= 0:
+            raise ValueError(f"n_operands_per_node must be greater than 0 it is {n_operands_per_node}")
+        if maximum_depth <= 0:
+            raise ValueError(f"maximum_depth must be greater than 0 it is {maximum_depth}")
+        if n_features_dataset <= 0:
+            raise ValueError(f"n_features_dataset must be greater than 0 it is {n_features_dataset}")
         
         self.n_operands_per_node = n_operands_per_node
         self.maximum_depth = maximum_depth
         self.n_features_dataset = n_features_dataset
         # Handle random key conversion
         if random_key is None:
-            self.random = jar.PRNGKey(0)
+            raise ValueError("random_key must be provided for random initialization")
         elif isinstance(random_key, int):
             random_key = jar.PRNGKey(random_key)
 

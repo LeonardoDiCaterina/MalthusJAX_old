@@ -8,6 +8,9 @@ import jax  # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
 
+DEFAULT_RANDOM_SEED = 0
+
+
 class AbstractCrossover(AbstractGeneticOperator, ABC):
     """Abstract base class for crossover operators.
     
@@ -56,12 +59,12 @@ class AbstractCrossover(AbstractGeneticOperator, ABC):
             """
             try:
                 # Create test data
-                test_key = jar.PRNGKey(0)
+                test_key = jar.PRNGKey(DEFAULT_RANDOM_SEED)
                 test_parent1 = jnp.ones(test_genome_shape, dtype=jnp.float32)
                 test_parent2 = jnp.zeros(test_genome_shape, dtype=jnp.float32)
                 
                 # Get the compiled function
-                crossover_fn = self.get_compiled_function()
+                crossover_fn = self.get_pure_function()
                 
                 # Test correct signature: (key, parent1, parent2)
                 try:

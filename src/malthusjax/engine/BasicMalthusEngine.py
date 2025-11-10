@@ -91,7 +91,7 @@ class BasicMalthusEngine(AbstractMalthusEngine):
         # This keeps the JAX shapes static and predictable.
         #num_crossover_pairs = jnp.ceil(num_offspring / 2).astype(jnp.int32)
         return {
-            'fitness_fn': self._fitness_evaluator.get_tensor_fitness_function(),
+            'fitness_fn': self._fitness_evaluator.get_pure_fitness_function(),
             'selection_fn': self._selection_operator.get_pure_function(),
             'crossover_fn': self._crossover_operator.get_pure_function(),
             'mutation_fn': self._mutation_operator.get_pure_function(),
@@ -124,7 +124,7 @@ class BasicMalthusEngine(AbstractMalthusEngine):
             key, _ = jar.split(key)
         # --- Fitness Evaluation ---
         if fitness_array is None:
-            fitness_fn = self._fitness_evaluator.get_tensor_fitness_function()
+            fitness_fn = self._fitness_evaluator.get_pure_fitness_function()
             fitness_array = jax.vmap(
                 fitness_fn,
                 in_axes=0

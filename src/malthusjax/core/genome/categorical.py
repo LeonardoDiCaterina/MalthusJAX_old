@@ -7,7 +7,7 @@ suitable for categorical optimization problems.
 
 from dataclasses import dataclass
 import functools
-from typing import Any, Optional, Dict, Tuple, List, Callable
+from typing import Any, Optional, Dict, Tuple, Callable
 
 import jax.numpy as jnp  # type: ignore
 from jax import Array  # type: ignore 
@@ -37,34 +37,36 @@ jax.tree_util.register_pytree_node(
 
 class CategoricalGenome(AbstractGenome):
     """
-    Binary genome implementation for real optimization problems.
+    Categorical genome representation.
     
-    Represents candidate solutions as real-valued arrays.
+    Represents candidate solutions as integer arrays with categorical values.
+    0 to num_categories - 1.
     """
 
     def __init__(self,
                  array_shape:Tuple[int, ...],
                  num_categories: int,
                  random_init: bool = False,
-                 random_key: Optional[int] = None,
+                 random_key: Optional[jnp.ndarray] = None,
                  **kwargs: Any):
         """
         Initialize Categorical genome.
         
         Args:
-            array_shape: array_shape of the real array
-            p: Probability of 1s during random initialization
+            array_shape: array_shape of the categorical array
+            num_categories: Number of categories (integer values from 0 to num_categories - 1
             random_init: Whether to randomly initialize
             random_key: Random seed
             **kwargs: Additional metadata
         """
         self.array_shape = array_shape
-        assert num_categories > 1, "num_categories must be greater than 1"
+        if num_categories < 1:
+            raise ValueError(f"num_categories must be greater than 1 it is {num_categories}")
         self.num_categories = num_categories
         
         # Handle random key conversion
         if random_key is None:
-            self.random = jar.PRNGKey(0)
+            raise ValueError("random_key must be provided for random initialization")
         elif isinstance(random_key, int):
             random_key = jar.PRNGKey(random_key)
 
@@ -80,16 +82,6 @@ class CategoricalGenome(AbstractGenome):
             random_key=random_key, 
             **kwargs
         )
-
-        '''def _random_init(self) -> None:
-        """Randomly initialize the genome as a real array."""
-        subkey = self.random_key
-        if subkey is None:
-            raise ValueError("Random key is not set for random_init")
-        self.genome = jar.randint(subkey,
-                                  shape=self.array_shape,
-                                  minval=0,
-                                  maxval=self.num_categories).astype(jnp.int32)'''
                             
     def _validate(self) -> bool:
         """Validate that genome contains only 0s and 1s."""

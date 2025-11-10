@@ -7,7 +7,7 @@ binary optimization problems and as a reference implementation.
 
 from dataclasses import dataclass
 import functools
-from typing import Any, Optional, Dict, Tuple, List, Callable
+from typing import Any, Optional, Dict, Tuple, Callable
 
 import jax.numpy as jnp  # type: ignore
 from jax import Array  # type: ignore 
@@ -40,7 +40,7 @@ jax.tree_util.register_pytree_node(
 
 class RealGenome(AbstractGenome):
     """
-    Binary genome implementation for real optimization problems.
+    Real-valued genome representation.
     
     Represents candidate solutions as real-valued arrays.
     """
@@ -50,26 +50,29 @@ class RealGenome(AbstractGenome):
                  min_val: float,
                  max_val: float,
                  random_init: bool = False,
-                 random_key: Optional[int] = None,
+                 random_key: Optional[jnp.ndarray] = None,
                  **kwargs: Any):
         """
         Initialize Real genome.
         
         Args:
             array_shape: array_shape of the real array
-            p: Probability of 1s during random initialization
+            min_val: Minimum value for each element
+            max_val: Maximum value for each element
             random_init: Whether to randomly initialize
             random_key: Random seed
             **kwargs: Additional metadata
         """
         self.array_shape = array_shape
-        assert max_val > min_val, "max_val must be greater than min_val"
+        if max_val < min_val:
+            raise ValueError(f"max_val {max_val} must be greater than min_val {min_val}")
+                             
         self.max_val = max_val
         self.min_val = min_val
         
         # Handle random key conversion
         if random_key is None:
-            self.random = jar.PRNGKey(0)
+            raise ValueError("random_key must be provided for random initialization")
         elif isinstance(random_key, int):
             random_key = jar.PRNGKey(random_key)
 

@@ -14,8 +14,8 @@ class RouletteSelection(AbstractSelectionOperator):
     Assumes fitness values are non-negative.
     """
 
-    def __init__(self, number_choices: int) -> None:
-        super().__init__(number_of_choices=number_choices)
+    def __init__(self, number_of_choices: int) -> None:
+        super().__init__(number_of_choices=number_of_choices)
 
     def get_pure_function(self) -> Callable:
         """

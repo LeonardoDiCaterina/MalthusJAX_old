@@ -28,7 +28,7 @@ class AbstractMalthusEngine(ABC):
         
         # 1. Get all the pure JAX functions from our factories
         self.init_fn = genome_representation.get_random_initialization_pure()
-        self.fitness_fn = fitness_evaluator.get_tensor_fitness_function()
+        self.fitness_fn = fitness_evaluator.get_pure_fitness_function()
         self.selection_fn = selection_op.get_pure_function()
         self.crossover_fn = crossover_op.get_pure_function()
         self.mutation_fn = mutation_op.get_pure_function()

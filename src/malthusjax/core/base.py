@@ -6,7 +6,7 @@ including JAX tensor interfaces, compatibility systems, and core evolutionary co
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Set, Final, Protocol, TypeVar, Dict, Optional, Union
+from typing import Any,TypeVar, Optional
 from jax import Array  # type: ignore
 import jax.random as jar  # type: ignore
 import jax  # type: ignore

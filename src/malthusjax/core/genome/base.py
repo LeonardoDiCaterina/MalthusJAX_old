@@ -53,7 +53,7 @@ class AbstractGenome(JAXTensorizable, ABC):
 
     def __init__(self, 
                  random_init: bool = False, 
-                 random_key: Optional[int] = None, 
+                 random_key: Optional[jnp.ndarray] = None,
                  **kwargs: Any):
         """
         Initialize genome base class.

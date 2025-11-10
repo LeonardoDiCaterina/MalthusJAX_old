@@ -12,6 +12,8 @@ import functools
 
 from malthusjax.operators.base import AbstractGeneticOperator
 
+DEFAULT_RANDOM_SEED = 0
+
 class AbstractMutation(AbstractGeneticOperator, ABC):
     """Abstract base class for mutation operators.
     
@@ -19,7 +21,7 @@ class AbstractMutation(AbstractGeneticOperator, ABC):
     (key: PRNGKey, genome: jax.Array) -> mutated_genome: jax.Array
     """
 
-    def __init__(self, mutation_rate: float , n_outputs: int = 1) -> None:
+    def __init__(self, mutation_rate: float) -> None:
         """
         Initialize mutation operator.
         
@@ -30,7 +32,6 @@ class AbstractMutation(AbstractGeneticOperator, ABC):
         if not (0.0 <= mutation_rate <= 1.0):
             raise ValueError("Mutation rate must be between 0.0 and 1.0")
         self.mutation_rate = mutation_rate
-        self.n_outputs = n_outputs
         
     @abstractmethod
     def get_pure_function(self) -> Callable:
@@ -40,6 +41,7 @@ class AbstractMutation(AbstractGeneticOperator, ABC):
         The function will have the signature:
         (key: jax.Array, genome: jax.Array) -> mutated_genome: jax.Array
         """
+        pass
     
     def verify_signature(self, test_genome_shape: Tuple[int, ...] = (5,)) -> bool:
         """
@@ -56,11 +58,11 @@ class AbstractMutation(AbstractGeneticOperator, ABC):
         """
         try:
             # Create test data
-            test_key = jar.PRNGKey(0)
+            test_key = jar.PRNGKey(DEFAULT_RANDOM_SEED)
             test_genome = jnp.ones(test_genome_shape, dtype=jnp.float32)
             
             # Get the compiled function
-            mutation_fn = self.get_compiled_function()
+            mutation_fn = self.get_pure_function()
             
             # Test correct signature: (key, genome)
             try:

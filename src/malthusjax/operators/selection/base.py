@@ -8,6 +8,8 @@ import jax # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
 
+DEFAULT_RANDOM_SEED = 0
+
 class AbstractSelectionOperator(AbstractGeneticOperator, ABC):
     """Abstract base class for selection operators.
     
@@ -51,7 +53,7 @@ class AbstractSelectionOperator(AbstractGeneticOperator, ABC):
         
         try:
             # Create test data
-            test_key = jax.random.PRNGKey(0)
+            test_key = jax.random.PRNGKey(DEFAULT_RANDOM_SEED)
             test_fitness = jax.numpy.ones(test_fitness_shape, dtype=jax.numpy.float32)
             
             # Get the pure function

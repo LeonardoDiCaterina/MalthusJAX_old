@@ -24,7 +24,7 @@ class AbstractFitnessEvaluator(ABC):
     
     def __init__(self):
         """Initialize the fitness evaluator."""
-        self._tensor_fitness_fn: Optional[Callable] = self.get_tensor_fitness_function()
+        self._tensor_fitness_fn: Optional[Callable] = self.get_pure_fitness_function()
         self._batch_fitness_fn: Optional[Callable] = self.get_batch_fitness_function()
         
     
@@ -72,7 +72,7 @@ class AbstractFitnessEvaluator(ABC):
             raise ValueError("tensor_fitness_function must be implemented")
     
     @abstractmethod
-    def get_tensor_fitness_function(self) -> Callable:
+    def get_pure_fitness_function(self) -> Callable:
         """
         Get the tensor-only fitness function.
         

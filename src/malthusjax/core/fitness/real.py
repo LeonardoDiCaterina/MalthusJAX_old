@@ -15,7 +15,7 @@ class SphereFitnessEvaluator(AbstractFitnessEvaluator):
     def __init__(self) -> None:
         super().__init__()
     
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
         
         def tensor_fitness_function(genome_tensor: Array) -> float:
             """
@@ -39,7 +39,7 @@ class RastriginFitnessEvaluator(AbstractFitnessEvaluator):
         super().__init__()
         self.A = A
 
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
         
         def tensor_fitness_function(genome_tensor: Array) -> float:
             """
@@ -61,7 +61,7 @@ class RosenbrockFitnessEvaluator(AbstractFitnessEvaluator):
     def __init__(self) -> None:
         super().__init__()
 
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
 
         def tensor_fitness_function(genome_tensor: Array) -> float:
             """
@@ -86,7 +86,7 @@ class AckleyFitnessEvaluator(AbstractFitnessEvaluator):
         self.b = b
         self.c = c
 
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
 
         def tensor_fitness_function(genome_tensor: Array) -> float:
             """
@@ -112,7 +112,7 @@ class GriewankFitnessEvaluator(AbstractFitnessEvaluator):
     def __init__(self) -> None:
         super().__init__()
 
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
         
         def tensor_fitness_function(genome_tensor: Array) -> float:
             """

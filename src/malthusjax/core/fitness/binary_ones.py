@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Callable
 from jax import Array # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax # type: ignore
@@ -17,7 +17,7 @@ class BinarySumFitnessEvaluator(AbstractFitnessEvaluator):
         self.name = "BinarySumFitnessEvaluator"
 
 
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
         
         def sum_function(genome_tensor: Array) -> float:
             """
@@ -60,7 +60,7 @@ class KnapsackFitnessEvaluator(AbstractFitnessEvaluator):
         self.name = "KnapsackFitnessEvaluator"
 
 
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
 
         def knapsack_function(genome_tensor: Array, weights: Array, values: Array, weight_limit:float,default_exceding_weight_penalization:float ) -> float:
             """

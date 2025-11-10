@@ -1,7 +1,5 @@
 import functools
 import pandas as pd # type: ignore
-from typing import Any
-from jax import Array # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax # type: ignore
 from .base import AbstractFitnessEvaluator
@@ -20,12 +18,12 @@ class TreeGPEvaluator(AbstractFitnessEvaluator):
         self.n_instructions_in_genome = n_instructions_in_genome
         super().__init__()
 
-    def get_tensor_fitness_function(self) -> float:
+    def get_pure_fitness_function(self) -> float:
         """
         JIT-compatible tensor-only fitness function that computes the sum of ones in the genome tensor.
 
         Args:
-            genome_tensor (Array): JAX array representing the genome
+            genome_tensor (jnp.ndarray): JAX tensor representing the genome.
 
         Returns:
             float: Fitness value as float

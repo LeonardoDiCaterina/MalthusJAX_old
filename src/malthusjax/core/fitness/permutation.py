@@ -12,7 +12,7 @@ class SortingFitnessEvaluator(AbstractFitnessEvaluator):
          super().__init__()
          self.name = "SortingFitnessEvaluator"
 
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
         def tensor_fitness_function(genome_tensor: Array) -> float:
             # Implement the fitness function for sorting
             sorted_tensor = jnp.sort(genome_tensor)
@@ -26,7 +26,7 @@ class TSPFitnessEvaluator(AbstractFitnessEvaluator):
         self.name = "TSPFitnessEvaluator"
         self.distance_matrix = distance_matrix
         
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
         
         def tensor_fitness_function(genome_tensor: Array) -> float:
             # Implement the fitness function for TSP using jax.lax
@@ -46,7 +46,7 @@ class FixedGroupingFitnessEvaluator(AbstractFitnessEvaluator):
 
 
 
-    def get_tensor_fitness_function(self) -> Callable[[Array], float]:
+    def get_pure_fitness_function(self) -> Callable[[Array], float]:
         def tensor_fitness_function(genome_tensor: Array) -> float:
             """
             JIT-compatible tensor-only fitness function for fixed grouping.
