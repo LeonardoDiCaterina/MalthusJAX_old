@@ -1,7 +1,6 @@
 import functools
 import pandas as pd # type: ignore
 from typing import Any
-from malthusjax.core.base import Compatibility
 from jax import Array # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax # type: ignore
