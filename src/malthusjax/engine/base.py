@@ -29,9 +29,9 @@ class AbstractMalthusEngine(ABC):
         # 1. Get all the pure JAX functions from our factories
         self.init_fn = genome_representation.get_random_initialization_compilable()
         self.fitness_fn = fitness_evaluator.get_tensor_fitness_function()
-        self.selection_fn = selection_op.get_compiled_function()
-        self.crossover_fn = crossover_op.get_compiled_function()
-        self.mutation_fn = mutation_op.get_compiled_function()
+        self.selection_fn = selection_op.get_pure_function()
+        self.crossover_fn = crossover_op.get_pure_function()
+        self.mutation_fn = mutation_op.get_pure_function()
         self._compiled_run_loop = None
 
         # This cache will store compiled `scan` functions,
@@ -167,10 +167,8 @@ class AbstractMalthusEngine(ABC):
         single_step_fn = self._get_step_fn()
         static_args = self._get_static_args(actual_pop_size)
         
-        print(f"Running MalthusJAX Engine for {num_generations} generations with population size {actual_pop_size}...")
         single_step_fn = functools.partial(single_step_fn, **static_args)        
         first_generation_state, _ = single_step_fn(initial_state, None)
-        print(f"Completed Generation {first_generation_state.population}")
         # start timing
         #start_time = jax.default_timer() 
         # 3. Run the compiled scan loop
