@@ -1,57 +1,25 @@
 """
-Defines the core state for the MalthusJAX engine.
-This state object is a Pytree and serves as the "carry"
-for the jax.lax.scan loop, passing all necessary information
-from one generation to the next.
+State definitions for MalthusJAX engines.
+
+This module provides backward compatibility and centralizes state definitions.
+For new code, prefer importing states directly from their respective engines:
+- ProductionState from malthusjax.engine.ProductionEngine
+- ResearchState from malthusjax.engine.ResearchEngine
 """
 
 import flax.struct # type: ignore
 from jax import Array # type: ignore
 from jax.random import PRNGKey # type: ignore
 
-# We use flax.struct.dataclass because it is a JAX-native
-# Pytree. This is essential for it to work as the 'carry'
-# in a jax.lax.scan loop.
+from malthusjax.engine.base import AbstractState
+
+
 @flax.struct.dataclass
-class MalthusState:
+class MalthusState(AbstractState):
     """
-    The complete, immutable state of the Genetic Algorithm at any
-    given generation.
-    """
+    Legacy state class for backward compatibility.
     
-    # --- Core GA Data ---
-    
-    population: Array
+    This is now just an alias to AbstractState for existing code.
+    New engines should define their own state classes that inherit from AbstractState.
     """
-    The JAX array of all genomes.
-    Shape: (population_size, *genome_shape)
-    """
-    
-    fitness: Array
-    """
-    The JAX array of fitness values for the population.
-    Shape: (population_size,)
-    """
-    
-    # --- Elitism & Tracking ---
-    
-    best_genome: Array
-    """
-    The single best genome found so far in the run.
-    Shape: (*genome_shape)
-    """
-    
-    best_fitness: float
-    """The fitness value of the single best genome."""
-    
-    # --- Loop State ---
-    
-    key: PRNGKey
-    """
-    The JAX PRNGKey. This is the MOST CRITICAL part.
-    It *must* be part of the state and updated every step
-    to ensure reproducible randomness.
-    """
-    
-    generation: int
-    """A simple integer counter for the current generation."""
+    pass

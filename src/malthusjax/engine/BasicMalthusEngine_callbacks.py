@@ -1,199 +1,9 @@
 
 """
-Legacy compatibility layer for BasicMalthusEngine.
 
-This module provides backward compatibility for existing code while delegating
-to the new ProductionEngine implementation. New code should use the engines directly:
+A concrete implementation of the AbstractMalthusEngine.
 
-- For production use: malthusjax.engine.ProductionEngine
-- For research use: malthusjax.engine.ResearchEngine  
-- For factory selection: malthusjax.engine.MalthusEngine(engine_type="...")
 """
-
-from typing import Callable, Dict, Optional, Tuple
-import jax # type: ignore
-import jax.numpy as jnp # type: ignore
-import jax.random as jar # type: ignore
-from functools import partial
-import warnings
-
-from malthusjax.core.genome import AbstractGenome
-from malthusjax.core.fitness.base import AbstractFitnessEvaluator
-from malthusjax.operators.selection.base import AbstractSelectionOperator
-from malthusjax.operators.crossover.base import AbstractCrossover
-from malthusjax.operators.mutation.base import AbstractMutation
-from malthusjax.engine.state import MalthusState
-from malthusjax.engine.ProductionEngine import ProductionEngine
-
-
-class BasicMalthusEngine:
-    """
-    Legacy compatibility wrapper around ProductionEngine.
-    
-    This class maintains the old API while delegating to the new 
-    ProductionEngine implementation. 
-    
-    DEPRECATED: Use ProductionEngine or ResearchEngine directly, or 
-    use the MalthusEngine factory function for new code.
-    """
-    
-    def __init__(self,
-                 genome_representation: AbstractGenome,
-                 fitness_evaluator: AbstractFitnessEvaluator,
-                 selection_operator: AbstractSelectionOperator,
-                 crossover_operator: AbstractCrossover,
-                 mutation_operator: AbstractMutation,
-                 elitism: int):
-        """
-        Initialize BasicMalthusEngine (legacy compatibility).
-        
-        This constructor now creates a ProductionEngine internally.
-        """
-        warnings.warn(
-            "BasicMalthusEngine is deprecated. Use ProductionEngine directly or "
-            "MalthusEngine factory function for new code.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        
-        # Store parameters for legacy API compatibility
-        self._genome_representation = genome_representation
-        self._fitness_evaluator = fitness_evaluator
-        self._selection_operator = selection_operator
-        self._crossover_operator = crossover_operator
-        self._mutation_operator = mutation_operator
-        self._elitism = elitism
-        
-        # Create the underlying ProductionEngine
-        self._engine = ProductionEngine(
-            genome_representation=genome_representation,
-            fitness_evaluator=fitness_evaluator,
-            selection_operator=selection_operator,
-            crossover_operator=crossover_operator,
-            mutation_operator=mutation_operator,
-            elitism=elitism
-        )
-    
-    @property
-    def elitism(self) -> int:
-        """Legacy property access."""
-        return self._elitism
-    
-    def run(self,
-            key: jax.Array,
-            num_generations: int,
-            initial_population: Optional[jax.Array] = None,
-            initial_fitness: Optional[jax.Array] = None,
-            pop_size: Optional[int] = None) -> Tuple[MalthusState, jax.Array]:
-        """
-        Legacy run method with old API.
-        
-        This method adapts the old API to the new ProductionEngine interface.
-        """
-        
-        # Determine population size
-        if initial_population is not None:
-            actual_pop_size = initial_population.shape[0]
-        elif pop_size is not None:
-            actual_pop_size = pop_size
-        else:
-            raise ValueError(
-                "Must provide either initial_population or pop_size"
-            )
-        
-        # Run the engine
-        final_state, fitness_history = self._engine.run(
-            key=key,
-            num_generations=num_generations,
-            pop_size=actual_pop_size,
-            initial_population=initial_population
-        )
-        
-        # Convert ProductionState to legacy MalthusState for compatibility
-        legacy_state = MalthusState(
-            population=final_state.population,
-            fitness=final_state.fitness,
-            best_genome=final_state.best_genome,
-            best_fitness=final_state.best_fitness,
-            key=final_state.key,
-            generation=final_state.generation
-        )
-        
-        return legacy_state, fitness_history
-
-
-# Legacy GA step function for compatibility
-# This is kept for any code that directly imports this function
-def ga_step_fn(
-    state: MalthusState,
-    _: None,
-    fitness_fn: Callable,
-    selection_fn: Callable,
-    crossover_fn: Callable,
-    mutation_fn: Callable,
-    pop_size: int,
-    elitism: int    
-) -> Tuple[MalthusState, float]:
-    """
-    Legacy GA step function.
-    
-    DEPRECATED: This function is kept for compatibility but new code
-    should use the step functions in ProductionEngine or ResearchEngine.
-    """
-    warnings.warn(
-        "ga_step_fn is deprecated. Use ProductionEngine or ResearchEngine instead.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    
-    # Split key for this generation
-    key, selection_key_1, selection_key_2, crossover_key, mutation_key = jar.split(state.key, 5)
-    
-    # Elitism
-    sorted_indices = jnp.argsort(-state.fitness)  # Sort descending for elites
-    elite_indices = sorted_indices[:elitism]
-    elite_individuals = state.population[elite_indices]
-    best_genome = elite_individuals[0]
-    best_fitness = state.fitness[elite_indices[0]]
-    
-    # Selection
-    num_offspring = pop_size - elitism
-    selected_indices_1 = selection_fn(selection_key_1, state.fitness)[:num_offspring]
-    selected_indices_2 = selection_fn(selection_key_2, state.fitness)[:num_offspring]
-    
-    # Crossover
-    parent_1 = state.population[selected_indices_1]
-    parent_2 = state.population[selected_indices_2]
-    crossover_fn_batched = jax.vmap(crossover_fn, in_axes=(0, 0, 0))
-    crossover_keys = jar.split(crossover_key, num_offspring)
-    offspring = crossover_fn_batched(crossover_keys, parent_1, parent_2)
-    
-    # Handle offspring shape
-    if len(offspring.shape) > 2:
-        offspring = offspring[:, 0, :]  # Take first offspring from each pair
-    
-    # Mutation
-    mutation_keys = jar.split(mutation_key, num_offspring)
-    mutation_fn_batched = jax.vmap(mutation_fn, in_axes=(0, 0))
-    mutated_offspring = mutation_fn_batched(mutation_keys, offspring)
-    
-    # Create new population
-    new_population = jnp.zeros_like(state.population)
-    new_population = new_population.at[:elitism].set(elite_individuals)
-    new_population = new_population.at[elitism:elitism+num_offspring].set(mutated_offspring)
-    
-    new_fitness = jax.vmap(fitness_fn)(new_population)
-    
-    new_state = state.replace(
-        population=new_population,
-        fitness=new_fitness,
-        best_genome=best_genome,
-        best_fitness=best_fitness,
-        key=key,
-        generation=state.generation + 1
-    )
-    
-    return new_state, best_fitness
 from typing import Callable, Dict, Optional, Tuple
 import jax # type: ignore
 import jax.numpy as jnp # type: ignore
@@ -399,9 +209,13 @@ def ga_step_fn(
     best_genome = elite_individuals[0]
     best_fitness = elite_fitnesses[0]
     
+    
     # --- Selection ---
+    # instead of:
     selected_indices_1 = selection_fn(selection_key_1, state.fitness )
     selected_indices_2 = selection_fn(selection_key_2, state.fitness )
+    # we could do:
+    MalthusState
     # -- Crossover ---
     parent_1 = state.population[selected_indices_1]
     parent_2 = state.population[selected_indices_2]
