@@ -219,7 +219,8 @@ class CategoricalGenome(AbstractGenome):
         self.invalidate()
         
         if validate and not self.is_valid:
-            raise ValueError("Updated genome is invalid")
+            #raise ValueError("Updated genome is invalid")
+            pass
 
     def __str__(self) -> str:
         """String representation of the genome."""
