@@ -530,9 +530,9 @@ class FunctionalDataAnalyzer(AbstractMultiRunVisualizer, VisualizationMixin):
         
         Args:
             kpi: KPI to analyze
-            smoothing_method: Smoothing method
-            basis_type: Basis function type
-            n_basis: Number of basis functions
+            smoothing_method: Smoothing method (possible: 'gaussian', 'polynomial', 'spline', 'savgol')
+            basis_type: Basis function type (possible: 'fourier', 'polynomial', 'bspline', 'gaussian')
+            n_basis: Number of basis functions 
             n_components: Number of principal components
             title: Dashboard title
             
