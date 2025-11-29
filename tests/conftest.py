@@ -53,16 +53,14 @@ def constrained_real_genome_config() -> RealGenomeConfig:
     return RealGenomeConfig(length=3, bounds=(-1.0, 1.0))
 
 
-@pytest.fixture  
+@pytest.fixture
 def categorical_genome_config() -> CategoricalGenomeConfig:
     """Standard categorical genome configuration."""
-    return CategoricalGenomeConfig(length=8, n_categories=4)
-
-
+    return CategoricalGenomeConfig(length=8, num_categories=4)
 @pytest.fixture
 def small_categorical_genome_config() -> CategoricalGenomeConfig:
     """Small categorical genome for quick tests."""
-    return CategoricalGenomeConfig(length=3, n_categories=3)
+    return CategoricalGenomeConfig(length=3, num_categories=3)
 
 
 @pytest.fixture
@@ -134,6 +132,13 @@ def assert_valid_binary_genome(genome: BinaryGenome, config: BinaryGenomeConfig)
     assert jnp.all((genome.bits == 0) | (genome.bits == 1))
 
 
+def assert_valid_binary_genome(genome: BinaryGenome, config: BinaryGenomeConfig) -> None:
+    """Assert that a binary genome is valid."""
+    assert isinstance(genome, BinaryGenome)
+    assert genome.bits.shape == (config.length,)
+    assert jnp.all((genome.bits == 0) | (genome.bits == 1))
+
+
 def assert_valid_real_genome(genome: RealGenome, config: RealGenomeConfig) -> None:
     """Assert that a real genome is valid."""
     assert isinstance(genome, RealGenome)
@@ -147,7 +152,7 @@ def assert_valid_categorical_genome(genome: CategoricalGenome, config: Categoric
     assert isinstance(genome, CategoricalGenome)
     assert genome.categories.shape == (config.length,)
     assert jnp.all(genome.categories >= 0)
-    assert jnp.all(genome.categories < config.n_categories)
+    assert jnp.all(genome.categories < config.num_categories)
 
 
 def assert_valid_binary_genome_batch(genome_batch, config: BinaryGenomeConfig) -> None:
@@ -205,7 +210,7 @@ def real_size_config(request) -> RealGenomeConfig:
 @pytest.fixture(params=[3, 5, 8])
 def categorical_size_config(request) -> CategoricalGenomeConfig:
     """Categorical genome configs of different sizes."""
-    return CategoricalGenomeConfig(length=request.param, n_categories=4)
+    return CategoricalGenomeConfig(length=request.param, num_categories=4)
 
 
 # Performance testing markers

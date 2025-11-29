@@ -19,6 +19,14 @@ class CategoricalGenomeConfig:
     """Configuration for Categorical genomes."""
     length: int           # Number of positions in the sequence
     num_categories: int   # Number of possible values at each position
+
+
+def validate_categorical_config(config: CategoricalGenomeConfig) -> None:
+    """Validate categorical genome configuration parameters."""
+    if config.length <= 0:
+        raise ValueError(f"Length must be positive, got {config.length}")
+    if config.num_categories <= 1:
+        raise ValueError(f"Number of categories must be greater than 1, got {config.num_categories}")
     
 
 @struct.dataclass

@@ -4,7 +4,6 @@ This module provides fitness functions specifically designed for binary genomes,
 including classic problems like BinarySum (OneMax) and Knapsack optimization.
 """
 
-from typing import Optional, Tuple, List
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -44,38 +43,17 @@ class BinarySumEvaluator:
         Returns:
             Fitness value (number of ones or zeros)
         """
-        ones_count = float(jnp.sum(genome.bits))
+        ones_count = jnp.sum(genome.bits).astype(jnp.float32)
         if self.config.maximize:
             return ones_count
         else:
-            return float(len(genome.bits)) - ones_count
+            length = jnp.array(len(genome.bits), dtype=jnp.float32)
+            return length - ones_count
             
-    def evaluate_batch(self, population: BinaryPopulation) -> List[float]:
-        """Evaluate a population of binary genomes."""
-        fitness_fn = self.get_tensor_fitness_function()
-        fitness_values = fitness_fn(population.genes.bits)
-        return fitness_values.tolist()
-            
-    def get_tensor_fitness_function(self):
-        """Get pure JAX function for batch evaluation."""
-        
-        def _binary_sum_fitness(bits_batch: jnp.ndarray) -> jnp.ndarray:
-            """Pure JAX function for binary sum fitness.
-            
-            Args:
-                bits_batch: Shape (batch_size, length) binary array
-                
-            Returns:
-                Fitness values of shape (batch_size,)
-            """
-            ones_counts = jnp.sum(bits_batch, axis=1)
-            if self.config.maximize:
-                return ones_counts.astype(jnp.float32)
-            else:
-                length = bits_batch.shape[1]
-                return (length - ones_counts).astype(jnp.float32)
-                
-        return _binary_sum_fitness
+    def evaluate_batch(self, population: BinaryPopulation) -> jnp.ndarray:
+        """Evaluate a population of binary genomes using NEW paradigm."""
+        # Use vmap for efficient batch evaluation - return JAX array for JIT compatibility
+        return jax.vmap(self.evaluate_single)(population.genes)
 
 
 @struct.dataclass 
@@ -137,7 +115,7 @@ class KnapsackEvaluator:
         else:
             return float(total_value)
             
-    def evaluate_batch(self, population: BinaryPopulation) -> List[float]:
+    def evaluate_batch(self, population: BinaryPopulation) -> jnp.ndarray:
         """Evaluate a population of binary genomes."""
         fitness_fn = self.get_tensor_fitness_function()
         fitness_values = fitness_fn(population.genes.bits)

@@ -10,9 +10,16 @@ import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
 import flax.struct # type: ignore
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Tuple, Any, List
+from typing import Callable, Optional, Tuple, Any, List, Generic, TypeVar
 import functools
 import time
+
+# Import for generic typing
+from malthusjax.core.base import BaseGenome, BasePopulation
+
+# Type variables for generics
+G = TypeVar('G', bound=BaseGenome)  # Genome type
+P = TypeVar('P', bound=BasePopulation)  # Population type
 
 
 def validate_engine_params(params: 'AbstractEngineParams') -> None:
@@ -62,28 +69,41 @@ class AbstractEngineParams:
 
 
 @flax.struct.dataclass
-class AbstractEvolutionState:
+class AbstractEvolutionState(Generic[G, P]):
     """
     Mutable state container that evolves across generations.
     
     This class holds the dynamic state of the evolutionary process,
-    including population metadata and RNG state. Must contain only
-    JAX-compatible types for JIT compilation.
+    including the population, best individual, and RNG state. Must contain only
+    JAX-compatible types for JIT compilation with jax.lax.scan.
+    
+    Type Parameters:
+        G: Genome type (subclass of BaseGenome)
+        P: Population type (subclass of BasePopulation[G])
     
     Attributes:
+        population: Current population of genomes
+        best_genome: Best genome found so far
         generation: Current generation number (0-indexed)
-        best_fitness: Best fitness value in current population
+        best_fitness: Best fitness value found so far
         stagnation_counter: Generations without fitness improvement
         rng_key: JAX PRNG key for reproducible randomness
         
     Example:
         >>> state = AbstractEvolutionState(
+        ...     population=initial_pop,
+        ...     best_genome=best_individual,
         ...     generation=0,
         ...     best_fitness=jnp.array(0.0),
         ...     stagnation_counter=0,
         ...     rng_key=jar.PRNGKey(42)
         ... )
     """
+    # --- CRITICAL: Population and Best Individual ---
+    population: P  # Current population
+    best_genome: G  # Best genome found so far
+    
+    # --- EXISTING: Metadata ---
     generation: int
     best_fitness: jax.Array
     stagnation_counter: int

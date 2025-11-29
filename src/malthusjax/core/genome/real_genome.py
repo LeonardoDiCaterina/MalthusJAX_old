@@ -19,6 +19,14 @@ class RealGenomeConfig:
     """Configuration for Real-valued genomes."""
     length: int           # Number of real values in the vector
     bounds: Tuple[float, float] = (-5.0, 5.0)  # (min, max) bounds for each value
+
+
+def validate_real_config(config: RealGenomeConfig) -> None:
+    """Validate real genome configuration parameters."""
+    if config.length <= 0:
+        raise ValueError(f"Length must be positive, got {config.length}")
+    if config.bounds[0] >= config.bounds[1]:
+        raise ValueError(f"Lower bound must be less than upper bound, got {config.bounds}")
     
 
 @struct.dataclass

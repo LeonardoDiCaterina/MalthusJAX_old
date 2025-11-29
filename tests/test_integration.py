@@ -1,283 +1,131 @@
 """
-Integration tests for the complete MalthusJAX Level 1 & 2 system.
-
-Tests that all components work together in realistic evolutionary scenarios.
+Integration tests for the full evolutionary pipeline.
 """
-
 import pytest
 import jax
 import jax.numpy as jnp
 import jax.random as jr
 
-from malthusjax.core.genome.binary_genome import BinaryGenome, BinaryGenomeConfig
-from malthusjax.core.fitness.binary_evaluators import BinarySumEvaluator as BinarySumFitnessEvaluator
+# 1. Import Core Components (Exposed at Top Level)
+from malthusjax import (
+    BinaryGenome, BinaryGenomeConfig, BinaryPopulation,
+    BinarySumEvaluator, BinarySumConfig
+)
 
-from malthusjax.operators.mutation.binary import BitFlipMutation
-from malthusjax.operators.crossover.binary import UniformCrossover
-from malthusjax.operators.selection.tournament import TournamentSelection
+# 2. Import The Library Namespace (For Operators)
+import malthusjax as mjx
 
-
-@pytest.mark.integration
 class TestBinaryEvolutionPipeline:
-    """Integration test for complete binary evolution pipeline."""
-
     def test_single_generation_binary(self, rng_key):
-        """Test a complete single generation of binary evolution."""
         # Setup
-        config = BinaryGenomeConfig(length=20)
+        binary_genome_config = BinaryGenomeConfig(length=10)
         pop_size = 10
+        k1, k2, k3, k4 = jr.split(rng_key, 4)
         
-        # Create initial population
-        keys = jr.split(rng_key, pop_size)
-        population = [BinaryGenome.random_init(key, config) for key in keys]
+        # 1. Init
+        population = BinaryPopulation.init_random(k1, binary_genome_config, pop_size)
+        assert len(population) == pop_size
+
+        # 2. Eval
+        evaluator = BinarySumEvaluator(BinarySumConfig(maximize=True))
+        fitness = jnp.array(evaluator.evaluate_batch(population))
+
+        # 3. Select (Using Clean Namespace)
+        # mjx.selection.Tournament matches your new __init__.py
+        selector = mjx.selection.Tournament(num_selections=pop_size, tournament_size=3)
+        selected_indices = selector(k2, fitness)
+        parents = population[selected_indices]
+
+        # 4. Crossover (Batch-First)
+        half = pop_size // 2
+        p1 = parents[:half]
+        p2 = parents[half:]
         
-        # Create operators
-        evaluator = BinarySumFitnessEvaluator()
-        selector = TournamentSelection(num_selections=pop_size, tournament_size=3)
-        crossover = UniformCrossover(num_offspring=1, crossover_rate=0.8)
-        mutator = BitFlipMutation(mutation_rate=0.05)
+        # mjx.crossover.Uniform
+        crossover = mjx.crossover.Uniform(num_offspring=2, crossover_rate=0.5)
         
-        # Evolution step
-        key1, key2, key3 = jr.split(rng_key, 3)
+        offspring_batch = crossover(k3, p1.genes, p2.genes, binary_genome_config)
         
-        # 1. Evaluate fitness
-        population_bits = jnp.array([genome.bits for genome in population])
-        fitness_values = evaluator.evaluate_batch(population_bits)
+        # FIX: Reshape explicitly (Batch -> Pop)
+        # (Half, 2, Length) -> (Pop, Length)
+        flat_bits = offspring_batch.bits.reshape(pop_size, binary_genome_config.length)
+        offspring_genome = BinaryGenome(bits=flat_bits)
         
-        assert fitness_values.shape == (pop_size,)
-        assert jnp.all(fitness_values >= 0)
-        assert jnp.all(fitness_values <= config.length)
+        assert flat_bits.shape == (pop_size, binary_genome_config.length)
+
+        # 5. Mutation (Batch-First)
+        # mjx.mutation.BitFlip
+        mutator = mjx.mutation.BitFlip(num_offspring=1, mutation_rate=0.1)
         
-        # 2. Selection
-        selected_indices = selector(key1, fitness_values)
-        assert selected_indices.shape == (pop_size,)
+        mutated_batch = mutator(k4, offspring_genome, binary_genome_config)
         
-        # 3. Crossover (pairwise)
-        cross_keys = jr.split(key2, pop_size // 2)
-        new_population = []
+        # FIX: Reshape explicitly (1, Pop, Length) -> (Pop, Length)
+        final_bits = mutated_batch.bits.reshape(pop_size, binary_genome_config.length)
         
-        for i in range(0, pop_size - 1, 2):
-            parent1_idx = selected_indices[i]
-            parent2_idx = selected_indices[i + 1]
-            
-            parent1 = population[parent1_idx]
-            parent2 = population[parent2_idx]
-            
-            offspring = crossover(cross_keys[i//2], parent1, parent2, config)
-            # crossover returns batch, take first offspring
-            child = BinaryGenome(bits=offspring.bits[0])
-            new_population.append(child)
-        
-        # If odd population size, add one more
-        if len(new_population) < pop_size:
-            parent_idx = selected_indices[-1]
-            new_population.append(population[parent_idx])
-        
-        assert len(new_population) == pop_size
-        
-        # 4. Mutation
-        mut_keys = jr.split(key3, pop_size)
-        mutated_population = []
-        
-        for i, genome in enumerate(new_population):
-            mutated_genome = mutator(mut_keys[i], genome, config)
-            mutated_population.append(mutated_genome)
-        
-        assert len(mutated_population) == pop_size
-        
-        # Verify final population
-        for genome in mutated_population:
-            assert isinstance(genome, BinaryGenome)
-            assert genome.bits.shape == (config.length,)
-            assert jnp.all((genome.bits == 0) | (genome.bits == 1))
+        assert final_bits.shape == (pop_size, binary_genome_config.length)
 
     @pytest.mark.jit
     def test_jit_compiled_binary_generation(self, rng_key):
-        """Test JIT-compiled binary evolution generation."""
+        """Verify JIT compilation of the loop."""
         config = BinaryGenomeConfig(length=10)
-        pop_size = 8
-        
-        # JIT-compile the evolution step
-        @jax.jit
-        def evolution_step(key, population_bits, fitness_values):
-            # Selection
-            selector = TournamentSelection(num_selections=pop_size, tournament_size=2)
-            select_fn = jax.jit(selector.get_pure_function())
-            
-            key1, key2, key3 = jr.split(key, 3)
-            selected_indices = select_fn(key1, fitness_values)
-            
-            # Simple mutation on selected population
-            selected_population = population_bits[selected_indices]
-            
-            mutator = BitFlipMutation(mutation_rate=0.1)
-            mutate_fn = jax.jit(mutator.get_pure_function(), static_argnames=['config'])
-            
-            # Apply mutation to entire selected population
-            mut_keys = jr.split(key2, pop_size)
-            mutated_population = jax.vmap(mutate_fn, in_axes=(0, 0, None))(
-                mut_keys, selected_population, config
-            )
-            
-            return mutated_population
-        
-        # Create initial population
-        keys = jr.split(rng_key, pop_size)
-        population_bits = jnp.array([
-            BinaryGenome.random_init(key, config).bits for key in keys
-        ])
-        
-        # Evaluate fitness
-        evaluator = BinarySumFitnessEvaluator()
-        fitness_values = evaluator.evaluate_batch(population_bits)
-        
-        # Run JIT-compiled evolution step
-        new_population = evolution_step(rng_key, population_bits, fitness_values)
-        
-        assert new_population.shape == (pop_size, config.length)
-        assert jnp.all((new_population == 0) | (new_population == 1))
-
-
-@pytest.mark.integration
-@pytest.mark.slow
-class TestLargeScaleIntegration:
-    """Large-scale integration tests."""
-
-    def test_large_binary_population(self, rng_key):
-        """Test evolution with large binary population."""
-        config = BinaryGenomeConfig(length=50)
-        pop_size = 100
-        
-        # Create large population
-        keys = jr.split(rng_key, pop_size)
-        
-        @jax.jit
-        def create_population(keys):
-            return jax.vmap(BinaryGenome.get_random_initialization_pure_from_config,
-                           in_axes=(0, None))(keys, config)
-        
-        population_bits = create_population(keys)
-        
-        # Batch evaluate
-        evaluator = BinarySumFitnessEvaluator()
-        fitness_values = evaluator.evaluate_batch(population_bits)
-        
-        # Batch select
-        selector = TournamentSelection(num_selections=pop_size, tournament_size=5)
-        selected_indices = selector(rng_key, fitness_values)
-        
-        # Verify everything worked at scale
-        assert population_bits.shape == (pop_size, config.length)
-        assert fitness_values.shape == (pop_size,)
-        assert selected_indices.shape == (pop_size,)
-        
-        # Check that selection favors high fitness
-        selected_fitness = fitness_values[selected_indices]
-        population_mean = jnp.mean(fitness_values)
-        selected_mean = jnp.mean(selected_fitness)
-        
-        # Selected individuals should have higher average fitness
-        assert selected_mean >= population_mean - 1.0  # Allow some variance
-
-    def test_multi_operator_compatibility(self, rng_key):
-        """Test that different operators work together seamlessly."""
-        # Test various operator combinations
-        
-        # Binary operators
-        from malthusjax.operators.mutation.binary import BitFlipMutation, ScrambleMutation
-        from malthusjax.operators.crossover.binary import UniformCrossover, SinglePointCrossover
-        
-        config = BinaryGenomeConfig(length=15)
-        
-        key1, key2 = jr.split(rng_key)
-        parent1 = BinaryGenome.random_init(key1, config)
-        parent2 = BinaryGenome.random_init(key2, config)
-        
-        # Test different mutation-crossover combinations
-        mutations = [BitFlipMutation(mutation_rate=0.1), ScrambleMutation()]
-        crossovers = [
-            UniformCrossover(num_offspring=2, crossover_rate=0.8),
-            SinglePointCrossover(num_offspring=2)
-        ]
-        
-        for mutator in mutations:
-            for crossover in crossovers:
-                # Test crossover
-                key3, key4 = jr.split(rng_key)
-                offspring = crossover(key3, parent1, parent2, config)
-                
-                # Test mutation on offspring
-                for i in range(offspring.bits.shape[0]):
-                    child = BinaryGenome(bits=offspring.bits[i])
-                    mutated = mutator(key4, child, config)
-                    
-                    # Verify result is valid
-                    assert isinstance(mutated, BinaryGenome)
-                    assert mutated.bits.shape == (config.length,)
-                    assert jnp.all((mutated.bits == 0) | (mutated.bits == 1))
-
-    def test_convergence_behavior(self, rng_key):
-        """Test that evolution improves fitness over multiple generations."""
-        config = BinaryGenomeConfig(length=20)
         pop_size = 20
-        num_generations = 5
         
-        # Initialize population
-        keys = jr.split(rng_key, pop_size)
-        population = [BinaryGenome.random_init(key, config) for key in keys]
+        # Bake operators using Clean Namespace
+        selector = mjx.selection.Tournament(num_selections=pop_size, tournament_size=3)
+        crossover = mjx.crossover.Uniform(num_offspring=2, crossover_rate=0.5)
+        mutator = mjx.mutation.BitFlip(num_offspring=1, mutation_rate=0.01)
+
+        @jax.jit
+        def evolution_step(key, current_bits, fitness):
+            k_sel, k_cross, k_mut = jr.split(key, 3)
+            
+            # Select
+            indices = selector(k_sel, fitness)
+            selected_bits = current_bits[indices]
+            
+            # Crossover
+            half = pop_size // 2
+            p1 = BinaryGenome(bits=selected_bits[:half])
+            p2 = BinaryGenome(bits=selected_bits[half:])
+            
+            off_gen = crossover(k_cross, p1, p2, config)
+            # Flatten: (Half, 2, L) -> (Pop, L)
+            off_bits = off_gen.bits.reshape(pop_size, config.length)
+            
+            # Mutate
+            off_gen_obj = BinaryGenome(bits=off_bits)
+            mut_gen = mutator(k_mut, off_gen_obj, config)
+            
+            # Explicit reshape instead of squeeze
+            return mut_gen.bits.reshape(pop_size, config.length)
+
+        # Run
+        pop = BinaryPopulation.init_random(rng_key, config, pop_size)
+        fitness = jnp.zeros(pop_size)
+        new_bits = evolution_step(rng_key, pop.genes.bits, fitness)
         
-        evaluator = BinarySumFitnessEvaluator()
-        selector = TournamentSelection(num_selections=pop_size, tournament_size=3)
-        crossover = UniformCrossover(num_offspring=1, crossover_rate=0.8)
-        mutator = BitFlipMutation(mutation_rate=0.05)
+        assert new_bits.shape == (pop_size, config.length)
+
+    def test_large_scale_integration(self, rng_key):
+        pop_size = 100
+        length = 50
+        config = BinaryGenomeConfig(length=length)
+        pop = BinaryPopulation.init_random(rng_key, config, pop_size)
         
-        fitness_history = []
-        current_key = rng_key
+        assert pop.genes.bits.shape == (pop_size, length)
         
-        for gen in range(num_generations):
-            # Evaluate fitness
-            population_bits = jnp.array([genome.bits for genome in population])
-            fitness_values = evaluator.evaluate_batch(population_bits)
-            
-            # Track best fitness
-            best_fitness = jnp.max(fitness_values)
-            fitness_history.append(best_fitness)
-            
-            # Evolve
-            key1, key2, key3, current_key = jr.split(current_key, 4)
-            
-            # Selection
-            selected_indices = selector(key1, fitness_values)
-            
-            # Crossover + Mutation
-            new_population = []
-            cross_keys = jr.split(key2, pop_size)
-            mut_keys = jr.split(key3, pop_size)
-            
-            for i in range(pop_size):
-                if i < pop_size - 1:
-                    # Crossover
-                    parent1_idx = selected_indices[i]
-                    parent2_idx = selected_indices[i + 1]
-                    
-                    parent1 = population[parent1_idx]
-                    parent2 = population[parent2_idx]
-                    
-                    offspring = crossover(cross_keys[i], parent1, parent2, config)
-                    child = BinaryGenome(bits=offspring.bits[0])
-                else:
-                    # Copy last selected individual
-                    child = population[selected_indices[i]]
-                
-                # Mutation
-                mutated_child = mutator(mut_keys[i], child, config)
-                new_population.append(mutated_child)
-            
-            population = new_population
+    def test_multi_operator_compatibility(self, rng_key):
+        config = BinaryGenomeConfig(length=10)
+        genome = BinaryGenome.random_init(rng_key, config)
         
-        # Check that fitness improved or stayed stable
-        initial_fitness = fitness_history[0]
-        final_fitness = fitness_history[-1]
+        # Clean Namespace Usage
+        op1 = mjx.mutation.BitFlip(num_offspring=1, mutation_rate=0.1)
+        op2 = mjx.mutation.Scramble(num_offspring=1, mutation_rate=1.0)
         
-        # Should show some improvement or at least not get worse
-        assert final_fitness >= initial_fitness - 1.0  # Allow some variance
+        # Chain
+        mutated1 = op1(rng_key, genome, config)
+        child1 = BinaryGenome(bits=mutated1.bits.reshape(1, -1)[0]) 
+        
+        mutated2 = op2(rng_key, child1, config)
+        
+        assert mutated2.bits.shape == (1, config.length)

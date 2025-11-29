@@ -56,11 +56,10 @@ class TestBinaryGenome:
     @pytest.mark.jit
     def test_jit_compatibility(self, rng_key, binary_genome_config):
         """Test that random_init can be JIT compiled."""
-        jit_init = jax.jit(BinaryGenome.get_random_initialization_pure_from_config,
-                          static_argnames=['config'])
+        # NEW paradigm: JIT compile the class method
+        jit_init = jax.jit(BinaryGenome.random_init, static_argnames=['config'])
         
-        bits = jit_init(rng_key, binary_genome_config)
-        genome = BinaryGenome(bits=bits)
+        genome = jit_init(rng_key, binary_genome_config)
         assert_valid_binary_genome(genome, binary_genome_config)
 
     def test_str_representation(self, binary_genome):
@@ -115,11 +114,10 @@ class TestRealGenome:
     @pytest.mark.jit
     def test_jit_compatibility(self, rng_key, real_genome_config):
         """Test that random_init can be JIT compiled."""
-        jit_init = jax.jit(RealGenome.get_random_initialization_pure_from_config,
-                          static_argnames=['config'])
+        # NEW paradigm: JIT compile the class method
+        jit_init = jax.jit(RealGenome.random_init, static_argnames=['config'])
         
-        values = jit_init(rng_key, real_genome_config)
-        genome = RealGenome(values=values)
+        genome = jit_init(rng_key, real_genome_config)
         assert_valid_real_genome(genome, real_genome_config)
 
     def test_str_representation(self, real_genome):
@@ -172,14 +170,13 @@ class TestCategoricalGenome:
             genome = CategoricalGenome.random_init(key, categorical_genome_config)
             assert_valid_categorical_genome(genome, categorical_genome_config)
 
-    @pytest.mark.jit  
+    @pytest.mark.jit
     def test_jit_compatibility(self, rng_key, categorical_genome_config):
         """Test that random_init can be JIT compiled."""
-        jit_init = jax.jit(CategoricalGenome.get_random_initialization_pure_from_config,
-                          static_argnames=['config'])
+        # NEW paradigm: JIT compile the class method
+        jit_init = jax.jit(CategoricalGenome.random_init, static_argnames=['config'])
         
-        categories = jit_init(rng_key, categorical_genome_config)
-        genome = CategoricalGenome(categories=categories)
+        genome = jit_init(rng_key, categorical_genome_config)
         assert_valid_categorical_genome(genome, categorical_genome_config)
 
     def test_str_representation(self, categorical_genome):
@@ -211,28 +208,32 @@ class TestGenomeConfigs:
 
     def test_categorical_config_frozen(self):
         """Test that categorical config is frozen (immutable)."""
-        config = CategoricalGenomeConfig(length=5, n_categories=3)
+        config = CategoricalGenomeConfig(length=5, num_categories=3)
         with pytest.raises(AttributeError):
             config.length = 10  # Should fail - frozen dataclass
 
     def test_real_config_invalid_bounds(self):
         """Test that invalid bounds raise an error."""
+        from malthusjax.core.genome.real_genome import validate_real_config
+        
+        invalid_config = RealGenomeConfig(length=5, bounds=(5.0, -5.0))  # min > max
         with pytest.raises(ValueError):
-            RealGenomeConfig(length=5, bounds=(5.0, -5.0))  # min > max
+            validate_real_config(invalid_config)
 
     def test_categorical_config_validation(self):
         """Test categorical config validation."""
+        from malthusjax.core.genome.categorical_genome import validate_categorical_config
+        
         # Valid config should work
-        config = CategoricalGenomeConfig(length=5, n_categories=3)
+        config = CategoricalGenomeConfig(length=5, num_categories=3)
         assert config.length == 5
-        assert config.n_categories == 3
+        assert config.num_categories == 3
+        validate_categorical_config(config)  # Should not raise
         
-        # Invalid configs should fail
+        # Invalid configs should raise errors
+        invalid_config = CategoricalGenomeConfig(length=0, num_categories=3)
         with pytest.raises(ValueError):
-            CategoricalGenomeConfig(length=0, n_categories=3)
-        
-        with pytest.raises(ValueError):
-            CategoricalGenomeConfig(length=5, n_categories=0)
+            validate_categorical_config(invalid_config)
 
 
 @pytest.mark.slow
@@ -251,11 +252,14 @@ class TestGenomePerformance:
         
         @jax.jit
         def create_population(keys):
-            return jax.vmap(BinaryGenome.get_random_initialization_pure_from_config,
-                           in_axes=(0, None))(keys, binary_genome_config)
+            # NEW paradigm: vmap the class method
+            return jax.vmap(BinaryGenome.random_init, in_axes=(0, None))(
+                keys, binary_genome_config)
         
         keys = jr.split(rng_key, batch_size)
         population = create_population(keys)
         
-        assert population.shape == (batch_size, binary_genome_config.length)
-        assert jnp.all((population == 0) | (population == 1))
+        # Extract bits for validation
+        population_bits = population.bits
+        assert population_bits.shape == (batch_size, binary_genome_config.length)
+        assert jnp.all((population_bits == 0) | (population_bits == 1))

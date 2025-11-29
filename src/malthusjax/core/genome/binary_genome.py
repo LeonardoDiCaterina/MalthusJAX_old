@@ -18,6 +18,12 @@ from malthusjax.core.base import BaseGenome, BasePopulation
 class BinaryGenomeConfig:
     """Configuration for Binary genomes."""
     length: int        # Number of bits in the binary string
+
+
+def validate_binary_config(config: BinaryGenomeConfig) -> None:
+    """Validate binary genome configuration parameters."""
+    if config.length <= 0:
+        raise ValueError(f"Length must be positive, got {config.length}")
     
 
 @struct.dataclass

@@ -11,8 +11,10 @@ import jax # type: ignore
 import jax.numpy as jnp # type: ignore
 from jax import Array # type: ignore
 
-# Import from compatibility layer  
-from malthusjax.compat import JAXTensorizable
+# Legacy base class - now simplified for compatibility
+class JAXTensorizable:
+    """Legacy base class - deprecated in favor of @struct.dataclass."""
+    pass
 
 class AbstractFitnessEvaluator(ABC):
     """
