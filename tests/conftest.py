@@ -1,0 +1,203 @@
+"""
+Shared pytest fixtures and test utilities for MalthusJAX.
+
+This module provides common fixtures and utilities used across all tests,
+including random keys, genome configurations, and test data.
+"""
+
+import pytest
+import jax
+import jax.numpy as jnp
+import jax.random as jr
+from typing import Generator, Tuple
+
+# Import genome types and configurations
+from malthusjax.core.genome.binary_genome import BinaryGenome, BinaryGenomeConfig
+from malthusjax.core.genome.real_genome import RealGenome, RealGenomeConfig  
+from malthusjax.core.genome.categorical_genome import CategoricalGenome, CategoricalGenomeConfig
+
+
+@pytest.fixture
+def rng_key() -> jax.Array:
+    """Base random key for deterministic tests."""
+    return jr.PRNGKey(42)
+
+
+@pytest.fixture
+def binary_genome_config() -> BinaryGenomeConfig:
+    """Standard binary genome configuration."""
+    return BinaryGenomeConfig(length=10)
+
+
+@pytest.fixture
+def small_binary_genome_config() -> BinaryGenomeConfig:
+    """Small binary genome for quick tests."""
+    return BinaryGenomeConfig(length=5)
+
+
+@pytest.fixture
+def large_binary_genome_config() -> BinaryGenomeConfig:
+    """Large binary genome for performance tests."""
+    return BinaryGenomeConfig(length=100)
+
+
+@pytest.fixture
+def real_genome_config() -> RealGenomeConfig:
+    """Standard real genome configuration."""
+    return RealGenomeConfig(length=5, bounds=(-5.0, 5.0))
+
+
+@pytest.fixture
+def constrained_real_genome_config() -> RealGenomeConfig:
+    """Real genome with tight bounds."""
+    return RealGenomeConfig(length=3, bounds=(-1.0, 1.0))
+
+
+@pytest.fixture  
+def categorical_genome_config() -> CategoricalGenomeConfig:
+    """Standard categorical genome configuration."""
+    return CategoricalGenomeConfig(length=8, n_categories=4)
+
+
+@pytest.fixture
+def small_categorical_genome_config() -> CategoricalGenomeConfig:
+    """Small categorical genome for quick tests."""
+    return CategoricalGenomeConfig(length=3, n_categories=3)
+
+
+@pytest.fixture
+def binary_genome(rng_key, binary_genome_config) -> BinaryGenome:
+    """Sample binary genome for testing."""
+    return BinaryGenome.random_init(rng_key, binary_genome_config)
+
+
+@pytest.fixture
+def real_genome(rng_key, real_genome_config) -> RealGenome:
+    """Sample real genome for testing.""" 
+    return RealGenome.random_init(rng_key, real_genome_config)
+
+
+@pytest.fixture
+def categorical_genome(rng_key, categorical_genome_config) -> CategoricalGenome:
+    """Sample categorical genome for testing."""
+    return CategoricalGenome.random_init(rng_key, categorical_genome_config)
+
+
+@pytest.fixture
+def binary_population(rng_key, binary_genome_config) -> Tuple[jax.Array, BinaryGenomeConfig]:
+    """Binary genome population for batch testing."""
+    pop_size = 10
+    keys = jr.split(rng_key, pop_size)
+    population_bits = jnp.array([
+        BinaryGenome.random_init(key, binary_genome_config).bits 
+        for key in keys
+    ])
+    return population_bits, binary_genome_config
+
+
+@pytest.fixture
+def real_population(rng_key, real_genome_config) -> Tuple[jax.Array, RealGenomeConfig]:
+    """Real genome population for batch testing."""
+    pop_size = 10
+    keys = jr.split(rng_key, pop_size)
+    population_values = jnp.array([
+        RealGenome.random_init(key, real_genome_config).values
+        for key in keys
+    ])
+    return population_values, real_genome_config
+
+
+@pytest.fixture
+def fitness_values() -> jax.Array:
+    """Sample fitness values for selection testing."""
+    return jnp.array([0.1, 0.8, 0.3, 0.9, 0.2, 0.7, 0.5, 0.6, 0.4, 0.95])
+
+
+@pytest.fixture
+def low_fitness_values() -> jax.Array:
+    """All low fitness values for edge case testing."""
+    return jnp.array([0.01, 0.02, 0.01, 0.03, 0.01])
+
+
+@pytest.fixture  
+def high_fitness_values() -> jax.Array:
+    """All high fitness values for edge case testing."""
+    return jnp.array([0.95, 0.98, 0.97, 0.99, 0.96])
+
+
+# Utility functions for test assertions
+
+def assert_valid_binary_genome(genome: BinaryGenome, config: BinaryGenomeConfig) -> None:
+    """Assert that a binary genome is valid."""
+    assert isinstance(genome, BinaryGenome)
+    assert genome.bits.shape == (config.length,)
+    assert jnp.all((genome.bits == 0) | (genome.bits == 1))
+
+
+def assert_valid_real_genome(genome: RealGenome, config: RealGenomeConfig) -> None:
+    """Assert that a real genome is valid."""
+    assert isinstance(genome, RealGenome)
+    assert genome.values.shape == (config.length,)
+    assert jnp.all(genome.values >= config.bounds[0])
+    assert jnp.all(genome.values <= config.bounds[1])
+
+
+def assert_valid_categorical_genome(genome: CategoricalGenome, config: CategoricalGenomeConfig) -> None:
+    """Assert that a categorical genome is valid."""
+    assert isinstance(genome, CategoricalGenome)
+    assert genome.categories.shape == (config.length,)
+    assert jnp.all(genome.categories >= 0)
+    assert jnp.all(genome.categories < config.n_categories)
+
+
+def assert_jit_compilable(func, *args) -> None:
+    """Assert that a function is JIT compilable."""
+    try:
+        jit_func = jax.jit(func)
+        result = jit_func(*args)
+        assert result is not None
+    except Exception as e:
+        pytest.fail(f"Function failed JIT compilation: {e}")
+
+
+def assert_deterministic(func, *args) -> None:
+    """Assert that a function produces deterministic results with same inputs."""
+    result1 = func(*args)
+    result2 = func(*args)
+    if hasattr(result1, 'shape'):
+        assert jnp.allclose(result1, result2), "Function should be deterministic"
+    else:
+        assert result1 == result2, "Function should be deterministic"
+
+
+# Parameterized fixtures for different genome sizes
+@pytest.fixture(params=[5, 10, 20])
+def binary_size_config(request) -> BinaryGenomeConfig:
+    """Binary genome configs of different sizes."""
+    return BinaryGenomeConfig(length=request.param)
+
+
+@pytest.fixture(params=[3, 5, 10])
+def real_size_config(request) -> RealGenomeConfig:
+    """Real genome configs of different sizes.""" 
+    return RealGenomeConfig(length=request.param, bounds=(-5.0, 5.0))
+
+
+@pytest.fixture(params=[3, 5, 8])
+def categorical_size_config(request) -> CategoricalGenomeConfig:
+    """Categorical genome configs of different sizes."""
+    return CategoricalGenomeConfig(length=request.param, n_categories=4)
+
+
+# Performance testing markers
+def pytest_configure(config):
+    """Configure custom pytest markers."""
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with -m 'not slow')"
+    )
+    config.addinivalue_line(
+        "markers", "jit: marks tests that specifically test JIT compilation"
+    )
+    config.addinivalue_line(
+        "markers", "integration: marks integration tests"
+    )
