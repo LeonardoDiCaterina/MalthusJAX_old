@@ -6,13 +6,13 @@ JAX's vmap and jit for efficient batch evaluation of genome populations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Union
 import jax # type: ignore
 import jax.numpy as jnp # type: ignore
 from jax import Array # type: ignore
 
-from ..base import JAXTensorizable
-from ..genome.base import AbstractGenome
+# Import from compatibility layer  
+from malthusjax.compat import JAXTensorizable
 
 class AbstractFitnessEvaluator(ABC):
     """
@@ -119,7 +119,7 @@ class AbstractFitnessEvaluator(ABC):
         except Exception as e:
             raise RuntimeError(f"Single genome fitness evaluation failed: {e}") from e
 
-    def evaluate_batch(self, genomes: List[jnp.ndarray]| List[AbstractGenome] | jnp.ndarray, return_tensors: bool = False) -> List[float]:
+    def evaluate_batch(self, genomes: Union[List[jnp.ndarray], List[JAXTensorizable], jnp.ndarray], return_tensors: bool = False) -> List[float]:
         """
         Evaluate a batch of genomes efficiently.
 

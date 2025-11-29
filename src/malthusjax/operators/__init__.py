@@ -1,30 +1,40 @@
 """
 Operators module for MalthusJAX - Level 2 Architecture.
 
-Provides genetic operation layers for Keras-like evolutionary algorithm composition.
-Security: Uses explicit imports only, no dynamic code execution.
+Provides genetic operation layers for evolutionary algorithms with NEW paradigm.
+Uses @struct.dataclass operators with JAX JIT compilation support.
 """
 
-from .base import AbstractGeneticOperator
-from .selection.base import AbstractSelectionOperator
-from .crossover.base import AbstractCrossover
-from .mutation.base import AbstractMutation
+# Import NEW paradigm base classes
+from .base import BaseMutation, BaseCrossover, BaseSelection
 
-from .selection import TournamentSelection, RouletteSelection
-from .crossover import SinglePointCrossover, UniformCrossover, AverageCrossover
+# Import concrete NEW operators
+from .selection import TournamentSelection, RouletteWheelSelection
+from .crossover import BinaryUniformCrossover, BinarySinglePointCrossover, BlendCrossover, SimulatedBinaryCrossover
 from .mutation import BitFlipMutation, CategoricalFlipMutation, BallMutation, SwapMutation, ScrambleMutation
+
+# Additional operators
+try:
+    from .linear_operators import LinearMutation, LinearCrossover
+except ImportError:
+    # Linear operators not available
+    pass
 
 
 __all__ = [
-    "AbstractGeneticOperator",
-    "AbstractSelectionOperator",
-    "AbstractCrossover",
-    "AbstractMutation",
+    # Base classes
+    "BaseMutation",
+    "BaseCrossover", 
+    "BaseSelection",
+    # Selection operators
     "TournamentSelection",
-    "RouletteSelection",
-    "SinglePointCrossover",
-    "UniformCrossover",
-    "AverageCrossover",
+    "RouletteWheelSelection",
+    # Crossover operators
+    "BinaryUniformCrossover",
+    "BinarySinglePointCrossover", 
+    "BlendCrossover",
+    "SimulatedBinaryCrossover",
+    # Mutation operators
     "BitFlipMutation",
     "CategoricalFlipMutation",
     "BallMutation",

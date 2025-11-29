@@ -1,16 +1,35 @@
 """
 Fitness module for MalthusJAX.
 
-This module provides abstract base classes and concrete implementations for
-fitness functions in evolutionary algorithms, with emphasis on efficient
-batch evaluation using JAX.
+This module provides NEW paradigm fitness evaluators using @struct.dataclass
+for efficient batch evaluation using JAX JIT compilation.
 """
 
-from .base import AbstractFitnessEvaluator
-from .binary_ones import BinarySumFitnessEvaluator, KnapsackFitnessEvaluator
+# NEW architecture evaluators
+from .base import AbstractFitnessEvaluator  # Keep for compatibility
+from .evaluators import BaseEvaluator, RegressionData
+from .linear_gp_evaluator import LinearGPEvaluator, OP_FUNCTIONS, OP_NAMES
+from .binary_evaluators import (
+    BinarySumEvaluator, BinarySumConfig,
+    KnapsackEvaluator, KnapsackConfig
+)
+from .real_evaluators import (
+    SphereEvaluator, SphereConfig,
+    GriewankEvaluator, GriewankConfig, 
+    BoxEvaluator, BoxConfig
+)
 
 __all__ = [
-    "AbstractFitnessEvaluator",
-    "BinarySumFitnessEvaluator",
-    "KnapsackFitnessEvaluator",
+    # Base classes
+    "AbstractFitnessEvaluator",  # Keep for compatibility
+    "BaseEvaluator", "RegressionData",
+    # NEW evaluators
+    "LinearGPEvaluator", "OP_FUNCTIONS", "OP_NAMES",
+    # Binary evaluators
+    "BinarySumEvaluator", "BinarySumConfig",
+    "KnapsackEvaluator", "KnapsackConfig", 
+    # Real evaluators
+    "SphereEvaluator", "SphereConfig",
+    "GriewankEvaluator", "GriewankConfig",
+    "BoxEvaluator", "BoxConfig",
 ]
