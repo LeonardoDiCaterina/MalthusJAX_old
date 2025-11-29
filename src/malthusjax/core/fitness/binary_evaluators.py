@@ -20,7 +20,8 @@ class BinarySumConfig:
     The OneMax problem is to maximize the number of 1s in a binary string.
     This is a classic benchmark problem in evolutionary computation.
     """
-    maximize: bool = True  # True = maximize ones, False = minimize ones
+    # Marked as static (pytree_node=False) to allow use in Python control flow within JIT
+    maximize: bool = struct.field(pytree_node=False, default=True)
     
 
 @struct.dataclass

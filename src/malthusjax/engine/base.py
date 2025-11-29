@@ -108,8 +108,7 @@ class AbstractEvolutionState(Generic[G, P]):
     best_fitness: jax.Array
     stagnation_counter: int
     rng_key: jax.Array
-    
-
+    fitness_values: jax.Array  
 
 @flax.struct.dataclass
 class AbstractGenerationOutput:

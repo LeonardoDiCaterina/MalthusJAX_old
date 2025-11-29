@@ -21,27 +21,35 @@ from .core.fitness.linear_gp_evaluator import LinearGPEvaluator
 
 class mutation:
     """Namespace for Mutation Operators."""
+    # Binary
     from .operators.mutation.binary import BitFlipMutation as BitFlip
     from .operators.mutation.binary import ScrambleMutation as Scramble
+    from .operators.mutation.binary import SwapMutation as Swap  
     
+    # Real
     from .operators.mutation.real import GaussianMutation as Gaussian
     from .operators.mutation.real import BallMutation as Ball
     from .operators.mutation.real import PolynomialMutation as Polynomial
     
+    # Categorical
     from .operators.mutation.categorical import CategoricalFlipMutation as CategoryFlip
     from .operators.mutation.categorical import RandomCategoryMutation as RandomCategory
     
+    # Linear
     from .operators.mutation.linear import LinearMutation as Linear
     from .operators.mutation.linear import LinearPointMutation as LinearPoint
 
 class crossover:
     """Namespace for Crossover Operators."""
+    # Binary
     from .operators.crossover.binary import UniformCrossover as Uniform
     from .operators.crossover.binary import SinglePointCrossover as SinglePoint
     
+    # Real
     from .operators.crossover.real import BlendCrossover as Blend
     from .operators.crossover.real import SimulatedBinaryCrossover as SBX
     
+    # Linear
     from .operators.crossover.linear import LinearCrossover as Linear
 
 class selection:
@@ -50,8 +58,5 @@ class selection:
     from .operators.selection.roulette import RouletteWheelSelection as Roulette
 
 # --- 3. ENGINE (Top Level) ---
-try:
-    from .engine.base import AbstractEngine, AbstractEvolutionState
-except ImportError:
-    # Engine not implemented yet
-    pass
+from .engine.base import AbstractEngine, AbstractEvolutionState, AbstractEngineParams
+from .engine.standard import StandardGeneticEngine, StandardEngineParams, StandardGenerationOutput
