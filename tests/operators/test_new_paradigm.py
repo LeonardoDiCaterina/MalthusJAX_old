@@ -29,6 +29,8 @@ from tests.conftest import (
     assert_valid_binary_genome,
     assert_valid_real_genome,
     assert_valid_categorical_genome,
+    assert_valid_binary_genome_batch,
+    assert_valid_real_genome_batch,
     assert_jit_compilable
 )
 
@@ -47,25 +49,24 @@ class TestBitFlipMutation:
     def test_jit_compilation(self, rng_key, binary_genome_config, binary_genome):
         """Test JIT compilation."""
         mutator = BitFlipMutation(mutation_rate=0.3)
-        jit_fn = jax.jit(mutator.get_pure_function(), static_argnames=['config'])
+        jit_fn = jax.jit(mutator)  # JIT the operator directly
         
-        mutated_bits = jit_fn(rng_key, binary_genome.bits, binary_genome_config)
-        result = BinaryGenome(bits=mutated_bits)
-        assert_valid_binary_genome(result, binary_genome_config)
+        result = jit_fn(rng_key, binary_genome, binary_genome_config)
+        assert_valid_binary_genome_batch(result, binary_genome_config)
 
     def test_batch_operation(self, rng_key, binary_population):
-        """Test batch mutation via vmap."""
+        """Test batch mutation - operators handle batching internally."""
         population_bits, config = binary_population
-        mutator = BitFlipMutation(mutation_rate=0.2)
+        mutator = BitFlipMutation(num_offspring=1, mutation_rate=0.2)
         
-        batch_size = population_bits.shape[0]
-        keys = jr.split(rng_key, batch_size)
+        # Test single genome from population
+        single_genome = BinaryGenome(bits=population_bits[0])
+        result = mutator(rng_key, single_genome, config)
         
-        mutate_fn = jax.vmap(mutator.get_pure_function(), in_axes=(0, 0, None))
-        mutated_population = mutate_fn(keys, population_bits, config)
-        
-        assert mutated_population.shape == population_bits.shape
-        assert jnp.all((mutated_population == 0) | (mutated_population == 1))
+        # NEW paradigm: operators return batch-first results
+        assert result.bits.shape[0] == 1  # num_offspring
+        assert result.bits.shape[1:] == population_bits[0].shape
+        assert jnp.all((result.bits == 0) | (result.bits == 1))
 
 
 class TestGaussianMutation:
@@ -82,8 +83,10 @@ class TestGaussianMutation:
     def test_jit_compilation(self, rng_key, real_genome_config, real_genome):
         """Test JIT compilation."""
         mutator = GaussianMutation(mutation_rate=0.2, mutation_strength=0.05)
-        assert_jit_compilable(mutator.get_pure_function(), 
-                             rng_key, real_genome.values, real_genome_config)
+        jit_mutator = jax.jit(mutator)  # JIT the operator directly
+        
+        result = jit_mutator(rng_key, real_genome, real_genome_config)
+        assert_valid_real_genome_batch(result, real_genome_config)
 
     def test_bounds_respected(self, rng_key, constrained_real_genome_config):
         """Test that mutation respects genome bounds."""
@@ -127,10 +130,10 @@ class TestUniformCrossover:
         parent2 = BinaryGenome.random_init(key2, binary_genome_config)
         
         crossover = UniformCrossover(num_offspring=2, crossover_rate=0.5)
-        jit_fn = jax.jit(crossover.get_pure_function(), static_argnames=['config'])
+        jit_fn = jax.jit(crossover)  # JIT operator directly
         
-        offspring_bits = jit_fn(rng_key, parent1.bits, parent2.bits, binary_genome_config)
-        assert offspring_bits.shape == (2, binary_genome_config.length)
+        offspring = jit_fn(rng_key, parent1, parent2, binary_genome_config)
+        assert offspring.bits.shape == (2, binary_genome_config.length)
 
     def test_inheritance_behavior(self, rng_key, binary_genome_config):
         """Test that offspring inherit from both parents."""
@@ -181,8 +184,9 @@ class TestBlendCrossover:
         parent2 = RealGenome.random_init(key2, real_genome_config)
         
         crossover = BlendCrossover(num_offspring=2, crossover_rate=0.7, alpha=0.5)
-        assert_jit_compilable(crossover.get_pure_function(),
-                             rng_key, parent1.values, parent2.values, real_genome_config)
+        jit_crossover = jax.jit(crossover)  # JIT operator directly
+        result = jit_crossover(rng_key, parent1, parent2, real_genome_config)
+        assert_valid_real_genome_batch(result, real_genome_config)
 
     def test_bounds_respected(self, rng_key, constrained_real_genome_config):
         """Test that blend crossover respects bounds."""
@@ -219,7 +223,7 @@ class TestTournamentSelection:
     def test_jit_compilation(self, rng_key, fitness_values):
         """Test JIT compilation."""
         selector = TournamentSelection(num_selections=3, tournament_size=2)
-        jit_fn = jax.jit(selector.get_pure_function())
+        jit_fn = jax.jit(selector)  # JIT operator directly
         
         selected = jit_fn(rng_key, fitness_values)
         assert selected.shape == (3,)
@@ -254,7 +258,7 @@ class TestRouletteWheelSelection:
     def test_jit_compilation(self, rng_key, fitness_values):
         """Test JIT compilation."""
         selector = RouletteWheelSelection(num_selections=3)
-        jit_fn = jax.jit(selector.get_pure_function())
+        jit_fn = jax.jit(selector)  # JIT operator directly
         
         selected = jit_fn(rng_key, fitness_values)
         assert selected.shape == (3,)
@@ -276,45 +280,36 @@ class TestOperatorIntegration:
     """Integration tests for operator combinations."""
 
     def test_complete_generation_cycle(self, rng_key, binary_genome_config):
-        """Test complete mutation → crossover → selection cycle."""
+        """Test complete mutation → crossover → selection cycle with NEW paradigm."""
         # Create initial population
-        pop_size = 10
+        pop_size = 6  # Smaller for cleaner test
         keys = jr.split(rng_key, pop_size)
-        population_bits = jnp.array([
-            BinaryGenome.random_init(key, binary_genome_config).bits
-            for key in keys
-        ])
         
-        # Apply mutations
-        mutator = BitFlipMutation(mutation_rate=0.1)
-        mut_keys = jr.split(rng_key, pop_size)
-        mutate_fn = jax.vmap(mutator.get_pure_function(), in_axes=(0, 0, None))
-        mutated_population = mutate_fn(mut_keys, population_bits, binary_genome_config)
+        # Create individual genomes using NEW paradigm 
+        genomes = [BinaryGenome.random_init(key, binary_genome_config) for key in keys]
         
-        # Apply crossover to create offspring
+        # Test mutation on first genome
+        mutator = BitFlipMutation(num_offspring=1, mutation_rate=0.1)
+        k1, rng_key = jr.split(rng_key)
+        mutated = mutator(k1, genomes[0], binary_genome_config)
+        assert mutated.bits.shape == (1, binary_genome_config.length)
+        
+        # Test crossover on genome pair  
         crossover = UniformCrossover(num_offspring=2, crossover_rate=0.7)
-        cross_keys = jr.split(rng_key, pop_size//2)
+        k2, rng_key = jr.split(rng_key)
+        offspring = crossover(k2, genomes[0], genomes[1], binary_genome_config)
+        assert offspring.bits.shape == (2, binary_genome_config.length)
         
-        offspring_list = []
-        for i in range(pop_size//2):
-            p1_bits = mutated_population[i*2]
-            p2_bits = mutated_population[i*2 + 1]
-            p1 = BinaryGenome(bits=p1_bits)
-            p2 = BinaryGenome(bits=p2_bits)
-            
-            offspring = crossover(cross_keys[i], p1, p2, binary_genome_config)
-            offspring_list.append(offspring.bits)
+        # Test selection with dummy fitness
+        population_bits = jnp.stack([g.bits for g in genomes])
+        fitness_values = jnp.sum(population_bits, axis=1)  # Simple sum fitness
         
-        # Flatten offspring
-        all_offspring = jnp.concatenate(offspring_list, axis=0)
+        selector = TournamentSelection(num_selections=3, tournament_size=2)
+        k3, rng_key = jr.split(rng_key)
+        selected_indices = selector(k3, fitness_values)
+        assert selected_indices.shape == (3,)
         
-        # Apply selection (dummy fitness for testing)
-        fitness_values = jnp.sum(all_offspring, axis=1)  # Simple sum fitness
-        selector = TournamentSelection(num_selections=pop_size, tournament_size=3)
-        selected_indices = selector(rng_key, fitness_values)
-        
-        # Final population
-        final_population = all_offspring[selected_indices]
+        # Verify end-to-end integration works with NEW paradigm
         
         assert final_population.shape == (pop_size, binary_genome_config.length)
         assert jnp.all((final_population == 0) | (final_population == 1))

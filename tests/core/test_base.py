@@ -8,24 +8,34 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from malthusjax.compat import JAXTensorizable
+"""
+Tests for base classes and abstractions (Level 1).
+
+Tests base genome, base operator abstractions and their contracts.
+"""
+
+import pytest
+import jax
+import jax.numpy as jnp
+
 from malthusjax.operators.base import BaseMutation, BaseCrossover, BaseSelection
 
 
-class TestJAXTensorizable:
-    """Test JAXTensorizable base class."""
+class TestBaseGenomeAbstractions:
+    """Test base genome and operator abstractions."""
 
-    def test_abstract_interface(self):
-        """Test that JAXTensorizable cannot be instantiated directly."""
-        # This should fail as it's an abstract class
-        with pytest.raises(TypeError):
-            JAXTensorizable()
-
-    def test_random_key_management(self):
-        """Test random key auto-splitting behavior."""
-        # We'll test this indirectly through concrete genome implementations
-        # since JAXTensorizable is abstract
-        pass  # Tested in genome tests
+    def test_base_operators_exist(self):
+        """Test that base operator classes are properly defined."""
+        assert BaseMutation is not None
+        assert BaseCrossover is not None 
+        assert BaseSelection is not None
+        
+    def test_generic_typing(self):
+        """Test that base operators use proper generic typing."""
+        # These should be abstract classes with generic parameters
+        assert hasattr(BaseMutation, '__orig_bases__')
+        assert hasattr(BaseCrossover, '__orig_bases__')
+        assert hasattr(BaseSelection, '__orig_bases__')
 
 
 class TestBaseMutation:

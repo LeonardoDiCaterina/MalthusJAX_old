@@ -1,46 +1,40 @@
 """
-Operators module for MalthusJAX - Level 2 Architecture.
+Genetic operators for evolutionary algorithms.
 
-Provides genetic operation layers for evolutionary algorithms with NEW paradigm.
-Uses @struct.dataclass operators with JAX JIT compilation support.
+Provides mutation, crossover, and selection operators organized by type.
+All operators follow the NEW @struct.dataclass paradigm with factory methods.
 """
 
-# Import NEW paradigm base classes
+# Base operator abstractions
 from .base import BaseMutation, BaseCrossover, BaseSelection
 
-# Import concrete NEW operators
-from .selection import TournamentSelection, RouletteWheelSelection
-from .crossover import BinaryUniformCrossover, BinarySinglePointCrossover, BlendCrossover, SimulatedBinaryCrossover
-from .mutation import BitFlipMutation, CategoricalFlipMutation, BallMutation, SwapMutation, ScrambleMutation
+# Crossover operators  
+from .crossover.binary import UniformCrossover, SinglePointCrossover
+from .crossover.real import BlendCrossover, SimulatedBinaryCrossover
+from .crossover.linear import LinearCrossover
 
-# Additional operators
-try:
-    from .linear_operators import LinearMutation, LinearCrossover
-except ImportError:
-    # Linear operators not available
-    pass
+# Mutation operators
+from .mutation.binary import BitFlipMutation, ScrambleMutation
+from .mutation.real import GaussianMutation, BallMutation, PolynomialMutation
+from .mutation.categorical import CategoricalFlipMutation, RandomCategoryMutation
+from .mutation.linear import LinearMutation, LinearPointMutation
 
+# Selection operators
+from .selection.tournament import TournamentSelection
+from .selection.roulette import RouletteWheelSelection
 
 __all__ = [
-    # Base classes
-    "BaseMutation",
-    "BaseCrossover", 
-    "BaseSelection",
-    # Selection operators
-    "TournamentSelection",
-    "RouletteWheelSelection",
+    # Base abstractions
+    "BaseMutation", "BaseCrossover", "BaseSelection",
     # Crossover operators
-    "BinaryUniformCrossover",
-    "BinarySinglePointCrossover", 
-    "BlendCrossover",
-    "SimulatedBinaryCrossover",
+    "UniformCrossover", "SinglePointCrossover", 
+    "BlendCrossover", "SimulatedBinaryCrossover",
+    "LinearCrossover", 
     # Mutation operators
-    "BitFlipMutation",
-    "CategoricalFlipMutation",
-    "BallMutation",
-    "SwapMutation",
-    "ScrambleMutation",
+    "BitFlipMutation", "ScrambleMutation",
+    "GaussianMutation", "BallMutation", "PolynomialMutation", 
+    "CategoricalFlipMutation", "RandomCategoryMutation",
+    "LinearMutation", "LinearPointMutation",
+    # Selection operators
+    "TournamentSelection", "RouletteWheelSelection"
 ]
-
-__version__ = "0.1.0"
-__security_checked__ = True

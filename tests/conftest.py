@@ -150,6 +150,25 @@ def assert_valid_categorical_genome(genome: CategoricalGenome, config: Categoric
     assert jnp.all(genome.categories < config.n_categories)
 
 
+def assert_valid_binary_genome_batch(genome_batch, config: BinaryGenomeConfig) -> None:
+    """Assert that a batch of binary genomes is valid (NEW paradigm)."""
+    # genome_batch should be BinaryGenome with batch-first shape (batch_size, length)
+    assert hasattr(genome_batch, 'bits')
+    batch_size = genome_batch.bits.shape[0]
+    assert genome_batch.bits.shape == (batch_size, config.length)
+    assert jnp.all((genome_batch.bits == 0) | (genome_batch.bits == 1))
+
+
+def assert_valid_real_genome_batch(genome_batch, config: RealGenomeConfig) -> None:
+    """Assert that a batch of real genomes is valid (NEW paradigm)."""
+    # genome_batch should be RealGenome with batch-first shape (batch_size, length)
+    assert hasattr(genome_batch, 'values')
+    batch_size = genome_batch.values.shape[0]
+    assert genome_batch.values.shape == (batch_size, config.length)
+    assert jnp.all(genome_batch.values >= config.bounds[0])
+    assert jnp.all(genome_batch.values <= config.bounds[1])
+
+
 def assert_jit_compilable(func, *args) -> None:
     """Assert that a function is JIT compilable."""
     try:

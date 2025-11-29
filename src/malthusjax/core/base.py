@@ -83,6 +83,13 @@ class BasePopulation(Generic[G]):
     
     GENOME_CLS: ClassVar[Type[G]] = None  # Override in concrete classes
 
+    # --- Factory Pattern (Critical for Engine) ---
+    @classmethod
+    @abstractmethod
+    def init_random(cls, key: chex.PRNGKey, config: Any, size: int) -> "BasePopulation[G]":
+        """Create a new population with random genomes and initialized fitness."""
+        raise NotImplementedError
+
     # --- List-like Interface ---
     def __len__(self) -> int:
         """Return population size."""
