@@ -1,90 +1,82 @@
 """
-Tournament Selection implementation for MalthusJAX.
+Tournament Selection implementation using the new paradigm.
+
+Implements tournament selection with @struct.dataclass for JIT compilation
+and automatic vectorization support.
 """
-import jax # type: ignore
-import jax.numpy as jnp # type: ignore
-import jax.random as jar # type: ignore
-from typing import Optional, Callable # type: ignore
 
-from malthusjax.operators.selection.base import AbstractSelectionOperator
-import functools
+import jax
+import jax.numpy as jnp
+import jax.random as jar
+from flax import struct
+import chex
+from malthusjax.operators.base import BaseSelection
 
-class TournamentSelection(AbstractSelectionOperator):
+
+@struct.dataclass
+class TournamentSelection(BaseSelection):
     """
-    Selects individuals using tournament selection.
+    Tournament Selection using the new paradigm.
+    
+    Selects individuals by running tournaments of specified size.
+    Higher fitness individuals have better chance of winning.
     """
-
-    def __init__(self, number_of_choices: int, tournament_size: int = 4) -> None:
+    # --- STATIC PARAMS (affect compilation) ---
+    tournament_size: int = struct.field(pytree_node=False, default=4)
+    
+    def __call__(self, key: chex.PRNGKey, fitness: chex.Array) -> chex.Array:
         """
+        Run tournament selection.
+        
         Args:
-            number_of_choices: The total number of individuals to select.
-            tournament_size: The number of individuals competing in each tournament.
+            key: PRNG Key
+            fitness: Fitness array (pop_size,)
+            
+        Returns:
+            Selected indices (num_selections,)
         """
-        super().__init__(number_of_choices=number_of_choices)
-        self.tournament_size = tournament_size
+        return _tournament_selection(key, fitness, self.num_selections, self.tournament_size)
 
-    def get_pure_function(self) -> Callable:
-        """
-        Returns a JIT-compilable function for tournament selection.
-        """
-        # Bake static parameters into the pure function
-        return functools.partial(
-            _tournament_selection,
-            number_of_choices=self.number_of_choices,
-            tournament_size=self.tournament_size
-        )
 
 # --- Pure JAX Function ---
 
 def _tournament_selection(
-    key: jax.Array,
-    fitness_values: jax.Array,
+    key: chex.PRNGKey,
+    fitness_values: chex.Array,
     number_of_choices: int,
     tournament_size: int
-) -> jax.Array:
+) -> chex.Array:
     """
     Pure JAX function for tournament selection.
     
     Args:
         key: PRNGKey
-        fitness_values: 1D array of fitnesses for the entire population.
-        number_of_choices: Static int. Total number of winners to select.
-        tournament_size: Static int. Participants per tournament.
+        fitness_values: 1D fitness array
+        number_of_choices: How many individuals to select
+        tournament_size: Size of each tournament
         
     Returns:
-        1D array of indices for the selected individuals.
+        1D array of selected indices
     """
-    population_size = fitness_values.shape[0]
-    
-    # Create keys for each choice
+    pop_size = fitness_values.shape[0]
     keys = jar.split(key, number_of_choices)
     
-    # vmap the selection of a single winner
-    return jax.vmap(
-        _select_one_winner,
-        in_axes=(0, None, None, None)
-    )(keys, fitness_values, population_size, tournament_size)
+    def single_tournament(k):
+        # Pick random contestants for this tournament
+        contestants = jar.randint(k, (tournament_size,), 0, pop_size)
+        # Get their fitness values
+        contestant_fitness = fitness_values[contestants]
+        # Find winner (highest fitness)
+        winner_idx = jnp.argmax(contestant_fitness)
+        return contestants[winner_idx]
+    
+    # Run all tournaments in parallel
+    selected_indices = jax.vmap(single_tournament)(keys)
+    return selected_indices
 
-def _select_one_winner(
-    key: jax.Array,
-    fitness_values: jax.Array,
-    population_size: int,
-    tournament_size: int
-) -> int:
-    """Selects a single winner from one tournament."""
-    # 1. Randomly pick tournament participants
-    participant_indices = jar.randint(
-        key,
-        shape=(tournament_size,),
-        minval=0,
-        maxval=population_size
-    )
-    
-    # 2. Get their fitness values
-    participant_fitnesses = fitness_values[participant_indices]
-    
-    # 3. Find the index of the winner *within the tournament*
-    winner_local_index = jnp.argmax(participant_fitnesses)
-    
-    # 4. Return the global index of the winner
-    return participant_indices[winner_local_index]
+
+# JIT compile with static arguments
+_tournament_selection = jax.jit(_tournament_selection, static_argnames=["number_of_choices", "tournament_size"])
+
+
+__all__ = ["TournamentSelection"]

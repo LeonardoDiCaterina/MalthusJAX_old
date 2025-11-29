@@ -4,37 +4,40 @@ Roulette Wheel Selection implementation for MalthusJAX.
 import jax # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
-from typing import Callable
-from malthusjax.operators.selection.base import AbstractSelectionOperator
-import functools
+import chex # type: ignore
+from flax import struct # type: ignore
+from malthusjax.operators.base import BaseSelection
 
-class RouletteSelection(AbstractSelectionOperator):
+
+@struct.dataclass
+class RouletteWheelSelection(BaseSelection):
     """
     Selects individuals using roulette wheel (fitness-proportionate) selection.
     Assumes fitness values are non-negative.
+    
+    Uses the new paradigm with @struct.dataclass for immutable, JIT-friendly operations.
     """
 
-    def __init__(self, number_of_choices: int) -> None:
-        super().__init__(number_of_choices=number_of_choices)
-
-    def get_pure_function(self) -> Callable:
+    def __call__(self, key: chex.PRNGKey, fitness: chex.Array) -> chex.Array:
         """
-        Returns a JIT-compilable function for roulette wheel selection.
+        Perform roulette wheel selection.
+        
+        Args:
+            key: PRNG Key
+            fitness: Fitness array (pop_size,)
+            
+        Returns:
+            Selected indices (num_selections,)
         """
-        # Bake static parameters into the pure function
-        return functools.partial(
-            _roulette_selection,
-            number_of_choices=self.number_of_choices
-        )
+        return _roulette_selection(key, fitness, self.num_selections)
 
 # --- Pure JAX Function ---
 
-@jax.jit
 def _roulette_selection(
-    key: jax.Array,
-    fitness_values: jax.Array,
+    key: chex.PRNGKey,
+    fitness_values: chex.Array,
     number_of_choices: int
-) -> jax.Array:
+) -> chex.Array:
     """
     Pure JAX function for roulette wheel selection.
     
@@ -52,10 +55,14 @@ def _roulette_selection(
     probabilities = (fitness_values + 1e-6) / (fitness_sum + 1e-6)
     
     # 2. Choose indices based on probabilities
-    selected_indices = jax.random.choice(
+    selected_indices = jar.choice(
         key,
         jnp.arange(fitness_values.shape[0]),
         shape=(number_of_choices,),
         p=probabilities
     )
     return selected_indices
+
+
+# JIT compile with static arguments
+_roulette_selection = jax.jit(_roulette_selection, static_argnames=["number_of_choices"])

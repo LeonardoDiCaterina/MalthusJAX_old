@@ -1,57 +1,115 @@
 """
-Abstract base classes for genetic layers in MalthusJAX.
+Abstract base classes for genetic operators in MalthusJAX Level 2.
 
-This module defines the layer abstractions that enable Keras-like composition
-of genetic operations for evolutionary algorithms.
+This module defines the operator abstractions following the new paradigm:
+- @struct.dataclass for immutable, JIT-compatible operators
+- Factory pattern with static/dynamic parameters
+- Pure JAX functions for maximum performance
+- Generic type support for all genome types
 """
-# Path: src/malthusjax/operators/base.py
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, TypeVar, Generic, Callable, Union
+from typing import TypeVar, Generic
+from flax import struct
+import chex
+import jax
 
-from malthusjax.core.base import JAXTensorizable
-"""
-Abstract base classes for genetic layers in MalthusJAX.
+# Generic Types
+G = TypeVar("G", bound="BaseGenome")
+C = TypeVar("C")  # Config Type
 
-This module defines the layer abstractions that enable Keras-like composition
-of genetic operations for evolutionary algorithms.
-"""
-from abc import ABC, abstractmethod
-from typing import Callable
-from malthusjax.core.base import JAXTensorizable
-
-class AbstractGeneticOperator(ABC):
-    """Abstract base class for genetic operators in MalthusJAX.
-    
-    All genetic operators follow a "factory" pattern, providing a
-    JIT-compilable function that operates on raw JAX arrays.
+# ==========================================
+# 1. ABSTRACT BASE: MUTATION
+# ==========================================
+@struct.dataclass
+class BaseMutation(Generic[G, C]):
     """
-
-    @abstractmethod    
-    def get_pure_function(self) -> Callable:
-        """
-        Get the pure, a Pure JAX function implementing the genetic operation.
-        
-        This function will have static arguments (like mutation_rate)
-        partially applied and is ready for `jax.jit`.
-        
-        Returns:
-            A callable JAX function.
-        """
-        pass
+    Abstract Mutation Operator using the new paradigm.
     
-    @abstractmethod
-    def verify_signature(self, *args  ) -> bool:
+    Design Philosophy:
+    - Static parameters (num_offspring) are pytree_node=False
+    - Dynamic parameters (mutation_rate) are regular fields
+    - Factory pattern: __call__ delegates to JIT-compilable _mutate_one
+    - Automatic vectorization for multiple offspring
+    """
+    # --- STATIC PARAMS (Re-compile if changed) ---
+    num_offspring: int = struct.field(pytree_node=False, default=1)
+
+    def __call__(self, key: chex.PRNGKey, genome: G, config: C) -> G:
         """
-        Verify that the compiled function follows the correct signature.
+        Applies mutation to produce 'num_offspring' children.
+        Output Shape: (Num_Offspring, Genome_Size...)
+        """
+        # Split keys for the static number of children
+        keys = jax.random.split(key, self.num_offspring)
         
+        # Vectorize the single mutation logic
+        return jax.vmap(
+            lambda k, g, c: self._mutate_one(k, g, c), 
+            in_axes=(0, None, None)
+        )(keys, genome, config)
+
+    def _mutate_one(self, key: chex.PRNGKey, genome: G, config: C) -> G:
+        """Abstract: Logic to produce EXACTLY ONE mutant."""
+        raise NotImplementedError("Subclasses must implement _mutate_one")
+
+
+# ==========================================
+# 2. ABSTRACT BASE: CROSSOVER
+# ==========================================
+@struct.dataclass
+class BaseCrossover(Generic[G, C]):
+    """
+    Abstract Crossover Operator using the new paradigm.
+    
+    Design Philosophy:
+    - Static parameters control output shape and compilation
+    - Dynamic parameters allow runtime tuning without recompilation
+    - Pure JAX functions for maximum performance
+    """
+    # --- STATIC PARAMS (Re-compile if changed) ---
+    num_offspring: int = struct.field(pytree_node=False, default=1)
+
+    def __call__(self, key: chex.PRNGKey, p1: G, p2: G, config: C) -> G:
+        """
+        Combines two parents to produce 'num_offspring' children.
+        Output Shape: (Num_Offspring, Genome_Size...)
+        """
+        keys = jax.random.split(key, self.num_offspring)
+        
+        # Vectorize the single crossover logic
+        return jax.vmap(
+            lambda k, a, b, c: self._cross_one(k, a, b, c),
+            in_axes=(0, None, None, None)
+        )(keys, p1, p2, config)
+
+    def _cross_one(self, key: chex.PRNGKey, p1: G, p2: G, config: C) -> G:
+        """Abstract: Logic to produce EXACTLY ONE child."""
+        raise NotImplementedError("Subclasses must implement _cross_one")
+
+
+# ==========================================
+# 3. ABSTRACT BASE: SELECTION
+# ==========================================
+@struct.dataclass
+class BaseSelection:
+    """
+    Abstract Selection Operator using the new paradigm.
+    
+    Design Philosophy:
+    - Operates purely on fitness arrays, genome-agnostic
+    - Returns indices for population gathering
+    - Supports both standard and symbiotic fitness landscapes
+    """
+    # STATIC: How many parents do we want to pick?
+    num_selections: int = struct.field(pytree_node=False)
+
+    def __call__(self, key: chex.PRNGKey, fitness: chex.Array) -> chex.Array:
+        """
         Args:
-            test_genome_shape: Shape of test genome for validation.
+            key: RNG Key
+            fitness: Shape (Pop_Size,) or (Pop_Size, Symbionts) 
             
         Returns:
-            True if signature is correct, False otherwise.
-            
-        Raises:
-            Exception with details if the signature test fails.
+            Selected Indices: Shape (num_selections,) int32
         """
-        pass
+        raise NotImplementedError("Subclasses must implement __call__")

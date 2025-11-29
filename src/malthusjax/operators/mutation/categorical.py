@@ -1,44 +1,96 @@
+"""
+Categorical mutation operators using the new paradigm.
+
+This module provides mutation operators for CategoricalGenome using the new 
+@struct.dataclass factory pattern for JIT compilation and vectorization.
+"""
+
 from typing import Callable
-import jax # type: ignore
-import jax.numpy as jnp # type: ignore
-import jax.random as jar # type: ignore
-from malthusjax.operators.mutation.base import AbstractMutation
+import jax
+import jax.numpy as jnp
+import jax.random as jar
+from flax import struct
+import chex
+from malthusjax.operators.base import BaseMutation
+from malthusjax.core.genome.categorical_genome import CategoricalGenome, CategoricalGenomeConfig
 import functools
 
-# Import permutation-style mutations, as they are also
-# valid operations on categorical genomes.
-from .permutation import SwapMutation, ScrambleMutation # type: ignore
+# Import permutation-style mutations for categorical genomes
+from malthusjax.operators.mutation.permutation import SwapMutation, ScrambleMutation
 
-class CategoricalFlipMutation(AbstractMutation):
+
+@struct.dataclass 
+class CategoricalFlipMutation(BaseMutation[CategoricalGenome, CategoricalGenomeConfig]):
     """
-    Replaces a gene with a new, uniformly random category.
-    - `mutation_rate`: Probability *each gene* will be mutated.
-    - `num_categories`: The total number of categories (e.g., 0 to N-1).
-    """
+    Categorical flip mutation using the new paradigm.
     
-    def __init__(self, mutation_rate: float, num_categories: int) -> None:
-        """
-        Args:
-            mutation_rate: Probability (0.0 to 1.0) of mutating each gene.
-            num_categories: The number of categories to sample from (e.g., 10).
-        """
-        super().__init__(mutation_rate=mutation_rate)
-        if num_categories <= 1:
-            raise ValueError("num_categories must be 2 or more.")
-        self.num_categories = num_categories
-
-    def get_pure_function(self) -> Callable:
-        """
-        Returns a JIT-compilable function for categorical flip mutation.
+    Replaces a gene with a new, uniformly random category.
+    Supports automatic vectorization for multiple offspring.
+    """
+    # --- DYNAMIC PARAMS ---
+    mutation_rate: float = 0.1
+    
+    def _mutate_one(self, key: chex.PRNGKey, genome: CategoricalGenome, config: CategoricalGenomeConfig) -> CategoricalGenome:
+        """Apply categorical flip mutation to a single genome."""
+        k1, k2 = jar.split(key)
         
-        The function signature is:
-        (key: jax.Array, genome: jax.Array) -> mutated_genome: jax.Array
-        """
-        return functools.partial(
-            _categorical_flip_mutation,
-            mutation_rate=self.mutation_rate,
-            num_categories=self.num_categories
+        # Generate mutation mask
+        mutation_mask = jar.bernoulli(k1, self.mutation_rate, genome.categories.shape)
+        
+        # Generate new random categories
+        new_categories = jar.randint(
+            k2, 
+            genome.categories.shape, 
+            0, 
+            config.num_categories
         )
+        
+        # Apply mutation where mask is True
+        mutated_values = jnp.where(mutation_mask, new_categories, genome.categories)
+        
+        # Create new genome using replace
+        return genome.replace(categories=mutated_values)
+
+
+@struct.dataclass
+class RandomCategoryMutation(BaseMutation[CategoricalGenome, CategoricalGenomeConfig]):
+    """
+    Advanced categorical mutation that ensures new categories are different from current ones.
+    Uses the new paradigm with automatic vectorization.
+    """
+    # --- DYNAMIC PARAMS ---
+    mutation_rate: float = 0.1
+    
+    def _mutate_one(self, key: chex.PRNGKey, genome: CategoricalGenome, config: CategoricalGenomeConfig) -> CategoricalGenome:
+        """Apply random category mutation to a single genome, ensuring categories change."""
+        k1, k2 = jar.split(key)
+        
+        # Generate mutation mask
+        mutation_mask = jar.bernoulli(k1, self.mutation_rate, genome.categories.shape)
+        
+        # Generate new categories (different from current)
+        new_categories = jar.randint(
+            k2, 
+            genome.categories.shape, 
+            0, 
+            config.num_categories - 1
+        )
+        
+        # Ensure new category is different by adjusting if >= current
+        new_categories = jnp.where(
+            new_categories >= genome.categories,
+            (new_categories + 1) % config.num_categories,
+            new_categories
+        )
+        
+        # Apply mutation where mask is True
+        mutated_values = jnp.where(mutation_mask, new_categories, genome.categories)
+        
+        # Create new genome using replace
+        return genome.replace(categories=mutated_values)
+
+
+# --- Pure JAX Functions ---
 
 # --- Pure JAX Function ---
 
@@ -72,10 +124,46 @@ def _categorical_flip_mutation(
     return mutated_genome.astype(genome.dtype)
 
 
+@jax.jit
+def _random_category_mutation(
+    key: jax.Array,
+    genome: jax.Array,
+    mutation_rate: float,
+    num_categories: int
+) -> jax.Array:
+    """Mutates genes to different random categories."""
+    
+    key_mask, key_vals = jar.split(key)
+    
+    # Create mutation mask
+    mutation_mask = jar.bernoulli(key_mask, p=mutation_rate, shape=genome.shape)
+    
+    # Generate new categories (different from current)
+    current_categories = genome
+    new_categories = jar.randint(
+        key_vals, 
+        shape=genome.shape,
+        minval=0, 
+        maxval=num_categories - 1
+    )
+    
+    # Ensure new category is different by adding 1 and wrapping
+    new_categories = jnp.where(
+        new_categories >= current_categories,
+        (new_categories + 1) % num_categories,
+        new_categories
+    )
+    
+    # Apply mutation
+    mutated_genome = jnp.where(mutation_mask, new_categories, genome)
+    return mutated_genome.astype(genome.dtype)
+
+
 # --- Re-export permutation ops for convenience ---
 # These operators work perfectly on categorical genomes too.
 __all__ = [
     "CategoricalFlipMutation",
+    "RandomCategoryMutation",
     "SwapMutation",
     "ScrambleMutation"
 ]

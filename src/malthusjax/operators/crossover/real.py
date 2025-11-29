@@ -1,122 +1,110 @@
-from malthusjax.operators.crossover.base import AbstractCrossover
-from functools import partial
-from typing import Callable
+from malthusjax.operators.base import BaseCrossover
+from malthusjax.core.genome.real_genome import RealGenome, RealGenomeConfig
+from flax import struct
 import jax # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax.random as jar # type: ignore
+import chex # type: ignore
 
-# --- Uniform Crossover ---
 
-class UniformCrossover(AbstractCrossover):
+@struct.dataclass
+class BlendCrossover(BaseCrossover[RealGenome, RealGenomeConfig]):
     """
-    Uniform Crossover. `n_outputs` can be 1 or 2.
-    - If `n_outputs=1`: Offspring has genes from P1 or P2 based on `crossover_rate`.
-    - If `n_outputs=2`: Offspring1 is (P1 where mask, P2 where ~mask)
-                        Offspring2 is (P2 where mask, P1 where ~mask)
+    Blend Crossover (BLX-α) using new batch-first paradigm.
+    
+    Creates offspring by sampling from intervals extended beyond the parent range.
+    Very effective for real-valued optimization problems.
     """
-    def get_pure_function(self) -> Callable:
-        return partial(
-            _uniform_crossover,
-            crossover_rate=self.crossover_rate,
-            n_outputs=self.n_outputs
-        )
-
-@partial(jax.jit, static_argnames=["n_outputs"])
-def _uniform_crossover(
-    key: jax.Array,
-    parent1: jax.Array,
-    parent2: jax.Array,
-    crossover_rate: float,
-    n_outputs: int
-) -> jax.Array:
-    """Pure JAX uniform crossover. Handles 1 or 2 outputs."""
-    mask = jar.bernoulli(key, p=crossover_rate, shape=parent1.shape)
-    offspring1 = jnp.where(mask, parent1, parent2)
+    # --- DYNAMIC PARAMS (runtime tunable) ---
+    crossover_rate: float = 0.9
+    alpha: float = 0.5  # Extension factor
     
-    if n_outputs == 1:
-        return offspring1.reshape((1,) + parent1.shape)
-    
-    # n_outputs == 2
-    offspring2 = jnp.where(mask, parent2, parent1)
-    return jnp.stack([offspring1, offspring2])
+    def _cross_one(self, key: chex.PRNGKey, p1: RealGenome, p2: RealGenome, config: RealGenomeConfig) -> RealGenome:
+        """Create one offspring via blend crossover."""
+        k1, k2 = jar.split(key)
+        
+        # Check if crossover should occur
+        apply_crossover = jar.bernoulli(k1, p=self.crossover_rate)
+        
+        def do_crossover():
+            """Perform BLX-α crossover."""
+            # Calculate gamma (interval extension)
+            diff = jnp.abs(p1.values - p2.values)
+            gamma = 1.0 + 2.0 * self.alpha
+            
+            # Define sampling interval
+            cmin = jnp.minimum(p1.values, p2.values) - self.alpha * diff
+            cmax = jnp.maximum(p1.values, p2.values) + self.alpha * diff
+            
+            # Sample offspring values
+            random_vals = jar.uniform(k2, shape=p1.values.shape)
+            offspring_values = cmin + random_vals * (cmax - cmin)
+            
+            # Apply bounds if specified
+            if hasattr(config, 'bounds') and config.bounds is not None:
+                if isinstance(config.bounds, tuple) and len(config.bounds) == 2:
+                    # Single bounds for all genes
+                    min_val, max_val = config.bounds
+                    offspring_values = jnp.clip(offspring_values, min_val, max_val)
+            
+            return offspring_values
+        
+        def no_crossover():
+            """Return parent1 without crossover."""
+            return p1.values
+        
+        offspring_values = jax.lax.cond(apply_crossover, do_crossover, no_crossover)
+        return RealGenome(values=offspring_values)
 
-# --- Single Point Crossover ---
 
-class SinglePointCrossover(AbstractCrossover):
+@struct.dataclass
+class SimulatedBinaryCrossover(BaseCrossover[RealGenome, RealGenomeConfig]):
     """
-    Single-point crossover. `n_outputs` can be 1 or 2.
-    - If `n_outputs=1`: Offspring is [P1_head, P2_tail]
-    - If `n_outputs=2`: Offspring1 is [P1_head, P2_tail]
-                        Offspring2 is [P2_head, P1_tail]
+    Simulated Binary Crossover (SBX) using new batch-first paradigm.
+    
+    Simulates the behavior of single-point crossover in binary representations
+    for real-valued variables. Commonly used in NSGA-II.
     """
-    def get_pure_function(self) -> Callable:
-        # Crossover rate is ignored for single point, but part of base class
-        return partial(
-            _single_point_crossover,
-            n_outputs=self.n_outputs
-        )
-
-@partial(jax.jit, static_argnames=["n_outputs"])
-def _single_point_crossover(
-    key: jax.Array,
-    parent1: jax.Array,
-    parent2: jax.Array,
-    n_outputs: int
-) -> jax.Array:
-    """Pure JAX single-point crossover."""
-    crossover_point = jar.randint(key, shape=(), minval=0, maxval=parent1.shape[0])
-    mask = jnp.arange(parent1.shape[0]) < crossover_point
+    # --- DYNAMIC PARAMS (runtime tunable) ---
+    crossover_rate: float = 0.9
+    eta: float = 20.0  # Distribution index
     
-    offspring1 = jnp.where(mask, parent1, parent2)
-    
-    if n_outputs == 1:
-        return offspring1.reshape((1,) + parent1.shape)
-    
-    # n_outputs == 2
-    offspring2 = jnp.where(mask, parent2, parent1)
-    return jnp.stack([offspring1, offspring2])
+    def _cross_one(self, key: chex.PRNGKey, p1: RealGenome, p2: RealGenome, config: RealGenomeConfig) -> RealGenome:
+        """Create one offspring via SBX crossover."""
+        k1, k2 = jar.split(key)
+        
+        # Check if crossover should occur
+        apply_crossover = jar.bernoulli(k1, p=self.crossover_rate)
+        
+        def do_sbx_crossover():
+            """Perform SBX crossover."""
+            # Generate random numbers for each gene
+            u = jar.uniform(k2, shape=p1.values.shape)
+            
+            # Calculate beta values based on distribution index
+            beta = jnp.where(
+                u <= 0.5,
+                (2.0 * u) ** (1.0 / (self.eta + 1.0)),
+                (1.0 / (2.0 * (1.0 - u))) ** (1.0 / (self.eta + 1.0))
+            )
+            
+            # Create offspring (take first child)
+            c1 = 0.5 * ((1.0 + beta) * p1.values + (1.0 - beta) * p2.values)
+            
+            # Apply bounds if specified
+            if hasattr(config, 'bounds') and config.bounds is not None:
+                if isinstance(config.bounds, tuple) and len(config.bounds) == 2:
+                    min_val, max_val = config.bounds
+                    c1 = jnp.clip(c1, min_val, max_val)
+            
+            return c1
+        
+        def no_crossover():
+            """Return parent1 without crossover."""
+            return p1.values
+        
+        offspring_values = jax.lax.cond(apply_crossover, do_sbx_crossover, no_crossover)
+        return RealGenome(values=offspring_values)
 
-# --- Average Crossover ---
 
-class AverageCrossover(AbstractCrossover):
-    """
-    Average (Blend) Crossover (BLX-alpha). `n_outputs` can be 1 or 2.
-    The `crossover_rate` is used as the 'alpha' blending factor.
-    - Offspring1 = alpha*P1 + (1-alpha)*P2
-    - Offspring2 = alpha*P2 + (1-alpha)*P1
-    """
-    def __init__(self, blend_rate: float, n_outputs: int = 2) -> None:
-        """
-        Args:
-            blend_rate: The 'alpha' for blending (0.0 to 1.0).
-                        0.5 is a simple average.
-            n_outputs: Number of offspring (1 or 2).
-        """
-        # Pass blend_rate as the crossover_rate to the base class
-        super().__init__(crossover_rate=blend_rate, n_outputs=n_outputs)
-
-    def get_pure_function(self) -> Callable:
-        return partial(
-            _average_crossover,
-            blend_rate=self.crossover_rate, # Use the rate as the blend_rate
-            n_outputs=self.n_outputs
-        )
-
-@partial(jax.jit, static_argnames=["n_outputs"])
-def _average_crossover(
-    key: jax.Array, # Key is unused, but part of the standard signature
-    parent1: jax.Array,
-    parent2: jax.Array,
-    blend_rate: float,
-    n_outputs: int
-) -> jax.Array:
-    """Pure JAX average (blend) crossover."""
-    
-    offspring1 = (blend_rate * parent1) + ((1.0 - blend_rate) * parent2)
-    
-    if n_outputs == 1:
-        return offspring1.reshape((1,) + parent1.shape)
-
-    # n_outputs == 2
-    offspring2 = (blend_rate * parent2) + ((1.0 - blend_rate) * parent1)
-    return jnp.stack([offspring1, offspring2])
+__all__ = ["BlendCrossover", "SimulatedBinaryCrossover"]

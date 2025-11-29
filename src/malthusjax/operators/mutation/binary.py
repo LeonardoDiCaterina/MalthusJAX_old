@@ -1,160 +1,112 @@
-from typing import Optional, Callable
-import jax # type: ignore
-import jax.numpy as jnp # type: ignore
-import jax.random as jar # type: ignore
-from malthusjax.operators.mutation.base import AbstractMutation
-import functools
+"""
+Binary mutation operators using the new paradigm.
+
+This module provides mutation operators for BinaryGenome using the new 
+@struct.dataclass factory pattern for JIT compilation and vectorization.
+"""
+
+from typing import Callable
+import jax
+import jax.numpy as jnp
+import jax.random as jar
+from flax import struct
+import chex
+from malthusjax.operators.base import BaseMutation
+from malthusjax.core.genome.binary_genome import BinaryGenome, BinaryGenomeConfig
 
 
-class BitFlipMutation(AbstractMutation):
-    """Bit flip mutation operator for binary genomes.
-    
-    Flips bits in binary genomes with a specified probability.
+@struct.dataclass
+class BitFlipMutation(BaseMutation[BinaryGenome, BinaryGenomeConfig]):
     """
-
-    def __init__(self, mutation_rate: float) -> None:
-        """Initialize bit flip mutation operator.
-        
-        Args:
-            mutation_rate: Probability of flipping each bit (0.0 to 1.0).
-        """
-        super().__init__(mutation_rate=mutation_rate)
-        
-    def get_pure_function(self) -> Callable:
-        """
-        Returns a JIT-compilable function for bit flip mutation.
-        
-        The function signature is:
-        (key: jax.Array, genome: jax.Array) -> mutated_genome: jax.Array
-        """
-        return functools.partial(
-            _bit_flip_mutation,
-            mutation_rate=self.mutation_rate
-        )
-
-
-class ScrambleMutation(AbstractMutation):
-    """Scramble mutation operator for binary genomes.
+    Bit flip mutation for binary genomes using the new paradigm.
     
-    Randomly shuffles the entire genome with a specified probability.
+    Flips each bit with probability mutation_rate.
+    Supports automatic vectorization for multiple offspring.
     """
-
-    def __init__(self, mutation_rate: float) -> None:
-        """Initialize scramble mutation operator.
-        
-        Args:
-            mutation_rate: Probability of scrambling the genome (0.0 to 1.0).
-        """
-        super().__init__(mutation_rate=mutation_rate)
-        
-    def get_pure_function(self) -> Callable:
-        """
-        Returns a JIT-compilable function for scramble mutation.
-        The function signature is:
-        (key: jax.Array, genome: jax.Array) -> mutated_genome: jax.Array
-        """
-        return functools.partial(
-            _scramble_mutation,
-            mutation_rate=self.mutation_rate
-        )
-
-
-class SwapMutation(AbstractMutation):
-    """Swap mutation operator for binary genomes.
+    # --- DYNAMIC PARAMS (Runtime configurable) ---
+    mutation_rate: float = 0.1
     
-    Swaps two randomly selected bits in the genome with a specified probability.
+    def _mutate_one(self, key: chex.PRNGKey, genome: BinaryGenome, config: BinaryGenomeConfig) -> BinaryGenome:
+        """Apply bit flip mutation to a single genome."""
+        # Generate mutation mask
+        mutation_mask = jar.bernoulli(key, self.mutation_rate, genome.bits.shape)
+        
+        # Apply XOR to flip bits where mask is True
+        mutated_bits = jnp.logical_xor(genome.bits, mutation_mask)
+        
+        # Create new genome using replace
+        return genome.replace(bits=mutated_bits)
+
+
+@struct.dataclass
+class ScrambleMutation(BaseMutation[BinaryGenome, BinaryGenomeConfig]):
     """
-
-    def __init__(self, mutation_rate: float) -> None:
-        """Initialize swap mutation operator.
+    Scramble Mutation for binary genomes using the new paradigm.
+    
+    The `mutation_rate` is the probability that the genome is scrambled *at all*.
+    Supports automatic vectorization for multiple offspring.
+    """
+    # --- DYNAMIC PARAMS ---
+    mutation_rate: float = 0.1
+    
+    def _mutate_one(self, key: chex.PRNGKey, genome: BinaryGenome, config: BinaryGenomeConfig) -> BinaryGenome:
+        """Apply scramble mutation to a single genome."""
+        k1, k2 = jar.split(key)
         
-        Args:
-            mutation_rate: Probability of performing a swap (0.0 to 1.0).
-        """
-        super().__init__(mutation_rate=mutation_rate)
+        # Conditionally apply scramble based on mutation rate
+        def scramble_genome():
+            # Generate random permutation indices
+            indices = jar.permutation(k2, jnp.arange(genome.bits.shape[-1]))
+            return genome.bits[indices]
         
-    def get_pure_function(self) -> Callable:
-        """
-        Returns a JIT-compilable function for swap mutation.
+        def keep_genome():
+            return genome.bits
         
-        The function signature is:
-        (key: jax.Array, genome: jax.Array) -> mutated_genome: jax.Array
-        """
-        return functools.partial(
-            _swap_mutation,
-            mutation_rate=self.mutation_rate
-        )
-
-
-# --- Pure JAX Functions ---
-
-@jax.jit
-def _bit_flip_mutation(
-    key: jax.Array,
-    genome: jax.Array,
-    mutation_rate: float
-) -> jax.Array:
-    """Flips bits in a binary genome based on mutation_rate."""
-    
-    # Create mutation mask with probability mutation_rate
-    mutation_mask = jar.bernoulli(key, p=mutation_rate, shape=genome.shape)
-    
-    # Apply mutation by flipping bits where mask is True
-    return jnp.where(mutation_mask, 
-                    ~genome.astype(bool), 
-                    genome).astype(genome.dtype)
-
-
-@jax.jit
-def _scramble_mutation(
-    key: jax.Array,
-    genome: jax.Array,
-    mutation_rate: float
-) -> jax.Array:
-    """Scrambles (shuffles) the genome based on mutation_rate."""
-    
-    key_decide, key_shuffle = jar.split(key)
-    
-    # Decide whether to scramble based on mutation_rate
-    should_scramble = jar.uniform(key_decide) < mutation_rate
-    
-    # Create scrambled version
-    scrambled_genome = jar.permutation(key_shuffle, genome, axis=0)
-    
-    # Return scrambled version if should_scramble, else original
-    return jnp.where(should_scramble, scrambled_genome, genome)
-
-
-@jax.jit
-def _swap_mutation(
-    key: jax.Array,
-    genome: jax.Array,
-    mutation_rate: float
-) -> jax.Array:
-    """Swaps two randomly selected bits based on mutation_rate."""
-    
-    key_decide, key_idx1, key_idx2 = jar.split(key, 3)
-    
-    # Decide whether to swap based on mutation_rate
-    should_swap = jar.uniform(key_decide) < mutation_rate
-    
-    def do_swap(genome_to_swap):
-        # Select two random indices
-        idx1 = jar.randint(key_idx1, (), 0, genome_to_swap.shape[0])
-        idx2 = jar.randint(key_idx2, (), 0, genome_to_swap.shape[0])
+        # Decide whether to scramble
+        should_mutate = jar.bernoulli(k1, self.mutation_rate)
+        mutated_bits = jax.lax.cond(should_mutate, scramble_genome, keep_genome)
         
-        # Perform the swap
-        swapped = genome_to_swap.at[idx1].set(genome_to_swap[idx2])
-        swapped = swapped.at[idx2].set(genome_to_swap[idx1])
-        return swapped
+        # Create new genome using replace
+        return genome.replace(bits=mutated_bits)
+
+
+@struct.dataclass
+class SwapMutation(BaseMutation[BinaryGenome, BinaryGenomeConfig]):
+    """
+    Swap Mutation for binary genomes using the new paradigm.
     
-    # Use jax.lax.cond to conditionally apply the swap
-    return jax.lax.cond(
-        should_swap,
-        do_swap,
-        lambda x: x,  # identity function
-        genome
-    )
+    Swaps two random genes in the genome.
+    The `mutation_rate` is the probability that a swap occurs *at all*.
+    """
+    # --- DYNAMIC PARAMS ---
+    mutation_rate: float = 0.1
+    
+    def _mutate_one(self, key: chex.PRNGKey, genome: BinaryGenome, config: BinaryGenomeConfig) -> BinaryGenome:
+        """Apply swap mutation to a single genome."""
+        k1, k2, k3 = jar.split(key, 3)
+        
+        # Conditionally apply swap based on mutation rate
+        def swap_genes():
+            # Pick two random positions
+            genome_size = genome.bits.shape[-1]
+            pos1 = jar.randint(k2, (), 0, genome_size)
+            pos2 = jar.randint(k3, (), 0, genome_size)
+            
+            # Perform swap
+            val1 = genome.bits[pos1]
+            val2 = genome.bits[pos2]
+            
+            return genome.bits.at[pos1].set(val2).at[pos2].set(val1)
+        
+        def keep_genome():
+            return genome.bits
+        
+        # Decide whether to swap
+        should_mutate = jar.bernoulli(k1, self.mutation_rate)
+        mutated_bits = jax.lax.cond(should_mutate, swap_genes, keep_genome)
+        
+        # Create new genome using replace
+        return genome.replace(bits=mutated_bits)
 
 
 __all__ = [
